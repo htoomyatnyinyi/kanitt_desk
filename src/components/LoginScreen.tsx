@@ -3,7 +3,7 @@ import { Eye, EyeOff, Store, Loader2, AlertCircle } from "lucide-react";
 import { useLoginMutation } from "../store/apiSlice";
 
 interface LoginScreenProps {
-  onLoginSuccess: (token: string, user: any) => void;
+  onLoginSuccess: (token: string) => void;
 }
 
 export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
@@ -29,7 +29,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
       if (result.token) {
         localStorage.setItem("kanitt_token", result.token);
-        onLoginSuccess(result.token, result.user);
+        onLoginSuccess(result.token);
       }
     } catch (err: any) {
       const code = err?.data?.code;

@@ -31,27 +31,8 @@ const INITIAL_PRODUCTS: Product[] = [
 
 const CATEGORIES = ["All", "Beverages", "Bakery", "Food"];
 
-export default function App() {
-  // ── Auth gate ──────────────────────────────────────────────────────────
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("kanitt_token"));
-  const [_currentUser, setCurrentUser] = useState<any>(null);
-
-  const handleLoginSuccess = (newToken: string, user: any) => {
-    setToken(newToken);
-    setCurrentUser(user);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("kanitt_token");
-    setToken(null);
-    setCurrentUser(null);
-  };
-
-  if (!token) {
-    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
-  }
-  // ──────────────────────────────────────────────────────────────────────
-  // UI State
+// ── POS Shell (rendered only when authenticated) ───────────────────────────
+function PosShell({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<"pos" | "inventory" | "sessions" | "settings">("pos");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,9 +62,10 @@ export default function App() {
     if (!apiProducts || apiProducts.length === 0) return INITIAL_PRODUCTS;
     return apiProducts.map((p) => ({
       ...p,
-      category: typeof p.category === "object" && p.category !== null
-        ? (p.category as { name: string }).name
-        : (p.category as string) || "General",
+      category:
+        typeof p.category === "object" && p.category !== null
+          ? (p.category as { name: string }).name
+          : (p.category as string) || "General",
       stock: p.stock ?? 0,
       barcode: p.barcode || "",
     })) as Product[];
@@ -104,11 +86,9 @@ export default function App() {
     refetchSessions();
   };
 
-  // Derive unique categories from live products
   const liveCategories = ["All", ...Array.from(new Set(products.map((p) => p.category)))];
   const categories = products === INITIAL_PRODUCTS ? CATEGORIES : liveCategories;
 
-  // Cart Logic
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
@@ -139,7 +119,6 @@ export default function App() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // Filtered products for POS grid
   const filteredProducts = products.filter((product) => {
     const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
     const matchesSearch =
@@ -149,7 +128,6 @@ export default function App() {
     return matchesCategory && matchesSearch;
   });
 
-  // Totals
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const tax = Math.round(subtotal * 0.05);
   const total = subtotal + tax;
@@ -185,10 +163,9 @@ export default function App() {
         stores={stores}
         selectedStore={selectedStore}
         setSelectedStore={setSelectedStore}
-        onLogout={handleLogout}
+        onLogout={onLogout}
       />
 
-      {/* Main content */}
       {activeTab === "pos" && (
         <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           <PosView
@@ -230,4 +207,24 @@ export default function App() {
       />
     </div>
   );
+}
+
+// ── Root App — auth gate only, no other hooks ──────────────────────────────
+export default function App() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("kanitt_token"));
+
+  const handleLoginSuccess = (newToken: string) => {
+    setToken(newToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("kanitt_token");
+    setToken(null);
+  };
+
+  if (!token) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  return <PosShell onLogout={handleLogout} />;
 }
