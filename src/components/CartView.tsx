@@ -1,4 +1,4 @@
-import { CreditCard, Plus, Minus, Trash2, Receipt } from "lucide-react";
+import { BadgePercent, CreditCard, Plus, Minus, Trash2, Receipt } from "lucide-react";
 import { CartItem } from "../types";
 
 interface CartViewProps {
@@ -10,6 +10,13 @@ interface CartViewProps {
   tax: number;
   total: number;
   setPaymentModalOpen: (open: boolean) => void;
+  discount: number;
+  promotionCode: string;
+  promotionInput: string;
+  setPromotionInput: (value: string) => void;
+  applyPromotion: () => void;
+  pricingLoading: boolean;
+  pricingError: string | null;
 }
 
 export function CartView({
@@ -21,6 +28,13 @@ export function CartView({
   tax,
   total,
   setPaymentModalOpen,
+  discount,
+  promotionCode,
+  promotionInput,
+  setPromotionInput,
+  applyPromotion,
+  pricingLoading,
+  pricingError,
 }: CartViewProps) {
   return (
     <div className="w-full lg:w-96 bg-slate-900 border-l border-slate-800 flex flex-col justify-between p-6 h-full">
@@ -103,12 +117,18 @@ export function CartView({
               {subtotal.toLocaleString()} MMK
             </span>
           </div>
+          {discount > 0 && <div className="flex justify-between text-emerald-300"><span>Promotion {promotionCode ? `· ${promotionCode}` : ""}</span><span className="font-semibold">−{discount.toLocaleString()} MMK</span></div>}
           <div className="flex justify-between text-slate-400">
-            <span>Tax (5%)</span>
+            <span>Configured tax</span>
             <span className="font-semibold text-slate-200">
               {tax.toLocaleString()} MMK
             </span>
           </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5">
+          <div className="flex items-center gap-2"><BadgePercent className="h-4 w-4 shrink-0 text-violet-300" /><input value={promotionInput} onChange={(event) => setPromotionInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); applyPromotion(); } }} placeholder="Promotion code" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600" /><button onClick={applyPromotion} disabled={pricingLoading || cart.length === 0} className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-300 hover:border-violet-300/40 hover:text-white disabled:opacity-40">{pricingLoading ? "Checking…" : promotionCode ? "Update" : "Apply"}</button></div>
+          {pricingError ? <p className="mt-2 text-[10px] leading-4 text-rose-300">{pricingError}</p> : promotionCode ? <p className="mt-2 text-[10px] text-emerald-300">{promotionCode} will be revalidated at checkout.</p> : null}
+        </div>
           <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800/80">
             <span>Total Payable</span>
             <span className="text-sky-400 font-black text-lg">
@@ -118,7 +138,7 @@ export function CartView({
         </div>
 
         <button
-          disabled={cart.length === 0}
+          disabled={cart.length === 0 || pricingLoading || Boolean(pricingError)}
           onClick={() => setPaymentModalOpen(true)}
           className="w-full bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all active:scale-98"
         >

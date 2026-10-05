@@ -58,10 +58,12 @@ export interface ApiOrder {
 
 export interface OrderInput {
   orderNumber?: string;
+  promotionCode?: string;
+  discountAmount?: number;
   currencyCode?: string;
   storeId: string;
   sessionId?: string;
-  items: { productId: string; quantity: number; unitPrice: number; subTotal: number }[];
+  items: { productId: string; variantId?: string; quantity: number; unitPrice: number; subTotal: number }[];
   subTotal: number;
   taxAmount: number;
   grandTotal: number;
@@ -229,6 +231,9 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Orders", "Products", "Sessions"],
     }),
+    quoteOrder: builder.mutation<any, { items: { productId: string; variantId?: string; quantity: number }[]; promotionCode?: string }>({
+      query: (body) => ({ url: "/tenant/orders/quote", method: "POST", body }),
+    }),
     completeOrder: builder.mutation<any, string>({
       query: (orderId) => ({ url: `/tenant/orders/${orderId}/complete`, method: "PATCH" }),
       invalidatesTags: ["Orders", "Products", "Sessions"],
@@ -306,6 +311,7 @@ export const {
   useOpenSessionMutation,
   useCloseSessionMutation,
   useCreateOrderMutation,
+  useQuoteOrderMutation,
   useCompleteOrderMutation,
   useLoginMutation,
 } = kanittApi;

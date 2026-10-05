@@ -5,6 +5,7 @@ import {
   useGetStoresQuery,
   useGetSessionsQuery,
   useCreateOrderMutation,
+  useQuoteOrderMutation,
   useCompleteOrderMutation,
   useGetOrdersQuery,
   useGetCategoriesQuery,
@@ -81,6 +82,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   >("cash");
   const [receivedAmount, setReceivedAmount] = useState("");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [orderPricing, setOrderPricing] = useState<any>(null);
+  const [promotionCode, setPromotionCode] = useState("");
+  const [promotionInput, setPromotionInput] = useState("");
+  const [pricingError, setPricingError] = useState<string | null>(null);
   const [checkoutOrderNumber, setCheckoutOrderNumber] = useState(
     () => `POS-${crypto.randomUUID()}`,
   );
@@ -152,6 +157,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   } = useGetReturnsQuery();
   const [createOrderApi, { isLoading: isCheckoutLoading }] =
     useCreateOrderMutation();
+  const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
   const [completeOrderApi, { isLoading: isCompletingOrder }] =
     useCompleteOrderMutation();
   const [createCatalogProduct] = useCreateCatalogProductMutation();
@@ -193,6 +199,34 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   })();
 
   const stores = apiStores || [];
+
+  useEffect(() => {
+    let stale = false;
+    if (!selectedStore?.id || cart.length === 0) {
+      setOrderPricing(null);
+      setPricingError(null);
+      if (cart.length === 0) {
+        setPromotionCode("");
+        setPromotionInput("");
+      }
+      return () => { stale = true; };
+    }
+    const timer = window.setTimeout(() => {
+      setOrderPricing(null);
+      setPricingError(null);
+      void quoteOrder({
+        items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        ...(promotionCode ? { promotionCode } : {}),
+      }).unwrap().then((result) => {
+        if (!stale) setOrderPricing(result.quote);
+      }).catch((error: unknown) => {
+        if (stale) return;
+        const value = error as { data?: { message?: string }; error?: string };
+        setPricingError(value.data?.message || value.error || "Could not calculate the current sale total.");
+      });
+    }, 160);
+    return () => { stale = true; window.clearTimeout(timer); };
+  }, [cart, selectedStore?.id, promotionCode, quoteOrder]);
 
   useEffect(() => {
     if (stores.length > 0 && !selectedStore) {
@@ -271,15 +305,21 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     return matchesCategory && matchesSearch;
   });
 
-  const subtotal = cart.reduce(
+  const cartSubtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
-  const tax = Math.round(subtotal * 0.05);
-  const total = subtotal + tax;
+  const subtotal = orderPricing?.subTotal ?? cartSubtotal;
+  const tax = orderPricing?.taxAmount ?? 0;
+  const discount = orderPricing?.discountAmount ?? 0;
+  const total = orderPricing?.grandTotal ?? subtotal;
   const changeAmount = Math.max(0, (Number(receivedAmount) || 0) - total);
 
   const handleCheckoutSuccess = async () => {
+    if (!orderPricing || pricingError) {
+      setCheckoutError(pricingError || "Wait for the server to calculate this sale before taking payment.");
+      return;
+    }
     if (isConnected && selectedStore) {
       const activeSession = (apiSessions ?? []).find(
         (session) => session.storeId === selectedStore.id && session.status === "OPEN",
@@ -293,12 +333,15 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           orderNumber: checkoutOrderNumber,
           storeId: selectedStore.id,
           sessionId: activeSession.id,
-          items: cart.map((item) => ({
-            productId: item.id,
+          items: orderPricing.items.map((item: { productId: string; variantId?: string; quantity: number; unitPrice: number; subTotal: number }) => ({
+            productId: item.productId,
+            variantId: item.variantId,
             quantity: item.quantity,
-            unitPrice: item.price,
-            subTotal: item.price * item.quantity,
+            unitPrice: item.unitPrice,
+            subTotal: item.subTotal,
           })),
+          promotionCode: promotionCode || undefined,
+          discountAmount: discount,
           subTotal: subtotal,
           taxAmount: tax,
           grandTotal: total,
@@ -335,6 +378,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     }
     alert(`Order completed! Change: ${changeAmount.toLocaleString()} MMK`);
     setCart([]);
+    setPromotionCode("");
+    setPromotionInput("");
+    setOrderPricing(null);
     setCheckoutOrderNumber(`POS-${crypto.randomUUID()}`);
     setPaymentModalOpen(false);
     setCheckoutError(null);
@@ -481,6 +527,13 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             tax={tax}
             total={total}
             setPaymentModalOpen={setPaymentModalOpen}
+            discount={discount}
+            promotionCode={promotionCode}
+            promotionInput={promotionInput}
+            setPromotionInput={setPromotionInput}
+            applyPromotion={() => { setCheckoutError(null); setPricingError(null); setOrderPricing(null); setPromotionCode(promotionInput.trim()); }}
+            pricingLoading={isPricingLoading || (!!selectedStore?.id && cart.length > 0 && !orderPricing && !pricingError)}
+            pricingError={pricingError}
           />
         </main>
       )}

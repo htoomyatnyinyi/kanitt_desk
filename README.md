@@ -24,7 +24,7 @@ Set `VITE_API_URL` to the intended deployed API origin, then run `bun run deskto
 - The Commerce Center provides desktop workflows for promotions, tax rates, cash registers, gift card issuance and reload, and customer wallet deposits/withdrawals. Access and allowed operations remain enforced by tenant server roles.
 - Checkout requires a reachable server, selected store, and an open register session. Each sale is posted to `/api/tenant/orders` with the active session, then marked complete through `/complete`.
 - There is no local demo catalog or offline sale queue. A network or API error keeps the cart available and displays the server error for retry.
-- Promotion and tax setup screens are available, but checkout pricing still needs server-side promotion and tax calculation integration before those configurations can affect receipts. The current POS tax calculation remains a 5% client default.
+- Checkout requests a server quote based on current product prices, active tax rates and an optional promotion code, then the server recalculates the order during save. Percentage and fixed amount promotions are supported; per-customer limits and other promotion types are not yet supported at checkout. Configure and review the tenant's actual tax rates before production use.
 
 ## ERP workflow map
 
