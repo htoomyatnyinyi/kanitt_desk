@@ -1,4 +1,4 @@
-import { X, CheckCircle2 } from "lucide-react";
+import { X, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 
 interface PaymentModalProps {
   paymentModalOpen: boolean;
@@ -10,6 +10,9 @@ interface PaymentModalProps {
   setReceivedAmount: (amount: string) => void;
   changeAmount: number;
   handleCheckoutSuccess: () => void;
+  isLoading: boolean;
+  error: string | null;
+  onDismissError: () => void;
 }
 
 export function PaymentModal({
@@ -22,6 +25,9 @@ export function PaymentModal({
   setReceivedAmount,
   changeAmount,
   handleCheckoutSuccess,
+  isLoading,
+  error,
+  onDismissError,
 }: PaymentModalProps) {
   if (!paymentModalOpen) return null;
 
@@ -39,6 +45,7 @@ export function PaymentModal({
         </div>
 
         <div className="space-y-4">
+          {error && <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{error}</span><button type="button" onClick={onDismissError} className="ml-auto text-rose-200">×</button></div>}
           <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center">
             <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Total Payable</span>
             <h2 className="text-3xl font-black text-sky-400 mt-1">{total.toLocaleString()} MMK</h2>
@@ -77,6 +84,8 @@ export function PaymentModal({
                 value={receivedAmount}
                 onChange={(e) => setReceivedAmount(e.target.value)}
                 placeholder="Enter cash received..."
+                min={total}
+                step="1"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-lg font-bold text-white focus:outline-none focus:border-sky-500"
               />
               {Number(receivedAmount) > 0 && (
@@ -90,10 +99,11 @@ export function PaymentModal({
 
           <button
             onClick={handleCheckoutSuccess}
-            className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
+            disabled={isLoading || (paymentMethod === "cash" && Number(receivedAmount) < total)}
+            className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <CheckCircle2 className="w-5 h-5" />
-            <span>Complete Order & Print Receipt</span>
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+            <span>{isLoading ? "Saving sale…" : "Complete Order"}</span>
           </button>
         </div>
       </div>

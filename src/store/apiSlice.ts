@@ -5,6 +5,12 @@ let BASE = import.meta.env.VITE_API_URL || "https://pos.oasislab.de5.net";
 if (!BASE.endsWith("/api")) BASE = `${BASE}/api`;
 const API_BASE_URL = BASE;
 
+const unwrapList = (response: any, key: string) => {
+  const payload = response?.data ?? response;
+  const list = Array.isArray(payload) ? payload : payload?.[key] ?? payload?.data;
+  return Array.isArray(list) ? list : [];
+};
+
 export interface Product {
   id: string;
   name: string;
@@ -14,6 +20,7 @@ export interface Product {
   stock?: number;
   barcode?: string;
   imageUrl?: string;
+  variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number }[];
 }
 
 export interface Store {
@@ -36,10 +43,30 @@ export interface Session {
   store?: { name: string };
 }
 
-export interface OrderInput {
+export interface ApiOrder {
+  id: string;
+  orderNumber?: string;
   storeId: string;
-  items: { productId: string; quantity: number; price: number }[];
-  totalAmount: number;
+  createdAt: string;
+  status: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  grandTotal: number;
+  items?: { id: string; productId?: string; variantId?: string; quantity: number; returnedQuantity?: number; unitPrice: number; subTotal: number; product?: { name?: string } }[];
+  user?: { name?: string; email?: string };
+}
+
+export interface OrderInput {
+  orderNumber?: string;
+  currencyCode?: string;
+  storeId: string;
+  sessionId?: string;
+  items: { productId: string; quantity: number; unitPrice: number; subTotal: number }[];
+  subTotal: number;
+  taxAmount: number;
+  grandTotal: number;
+  paidAmount: number;
+  changeAmount: number;
   paymentMethod: string;
 }
 
@@ -55,7 +82,7 @@ export const kanittApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Products", "Stores", "Sessions", "Orders", "Categories"],
+  tagTypes: ["Products", "Stores", "Sessions", "Orders", "Categories", "Brands", "Suppliers", "Customers", "Staff", "Inventory", "PurchaseOrders", "Expenses", "ExpenseCategories", "SupplierPayments", "StockTransfers", "Returns", "AuditLogs", "Promotions", "TaxRates", "CashRegisters", "GiftCards", "Wallets"],
   endpoints: (builder) => ({
     // Health Check
     getHealth: builder.query<{ success: boolean; status: string; service: string }, void>({
@@ -63,21 +90,20 @@ export const kanittApi = createApi({
     }),
 
     // Products
-    getProducts: builder.query<Product[], void>({
-      query: () => "/tenant/products",
+    getProducts: builder.query<Product[], { storeId?: string }>({
+      query: ({ storeId }) => ({ url: "/tenant/products", params: { limit: 100, ...(storeId ? { storeId } : {}) } }),
       transformResponse: (response: any) => {
-        const list = response?.data || response || [];
-        return Array.isArray(list)
-          ? list.map((p: any) => ({
+        const list = unwrapList(response, "products");
+        return list.map((p: any) => ({
               id: p.id,
               name: p.name,
               category: typeof p.category === "object" ? p.category?.name || "General" : p.category || "General",
-              price: Number(p.price) || 0,
+              price: Number(p.price ?? p.variants?.find((v: any) => v.isActive)?.price) || 0,
               sku: p.sku || `SKU-${p.id.slice(0, 4)}`,
-              stock: p.stock ?? 100,
+              stock: Number(p.totalStock ?? p.stock ?? 0),
               barcode: p.barcode || "",
-            }))
-          : [];
+              variants: Array.isArray(p.variants) ? p.variants.map((v: any) => ({ id: v.id, name: v.name, sku: v.sku, barcode: v.barcode || "", price: Number(v.price) || 0, costPrice: Number(v.costPrice) || 0 })) : [],
+            }));
       },
       providesTags: ["Products"],
     }),
@@ -90,24 +116,95 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Products"],
     }),
+    createCatalogProduct: builder.mutation<any, Record<string, unknown>>({
+      query: (body) => ({ url: "/tenant/products", method: "POST", body }),
+      invalidatesTags: ["Products", "Inventory"],
+    }),
+    updateCatalogProduct: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/products/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Products", "Inventory"] }),
+
+    getCategories: builder.query<any[], void>({ query: () => ({ url: "/tenant/categories", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "categories"), providesTags: ["Categories"] }),
+    createCategory: builder.mutation<any, { name: string; description?: string }>({ query: (body) => ({ url: "/tenant/categories", method: "POST", body }), invalidatesTags: ["Categories"] }),
+    updateCategory: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/categories/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Categories", "Products"] }),
+    getBrands: builder.query<any[], void>({ query: () => ({ url: "/tenant/brands", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "brands"), providesTags: ["Brands"] }),
+    createBrand: builder.mutation<any, { name: string; description?: string }>({ query: (body) => ({ url: "/tenant/brands", method: "POST", body }), invalidatesTags: ["Brands"] }),
+    updateBrand: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/brands/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Brands"] }),
+    getSuppliers: builder.query<any[], void>({ query: () => ({ url: "/tenant/suppliers", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "suppliers"), providesTags: ["Suppliers"] }),
+    createSupplier: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/suppliers", method: "POST", body }), invalidatesTags: ["Suppliers"] }),
+    updateSupplier: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/suppliers/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Suppliers"] }),
+    getCustomers: builder.query<any[], void>({ query: () => ({ url: "/tenant/customers", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "customers"), providesTags: ["Customers"] }),
+    createCustomer: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/customers", method: "POST", body }), invalidatesTags: ["Customers"] }),
+    updateCustomer: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/customers/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Customers"] }),
+    getStaff: builder.query<any[], { storeId?: string }>({ query: ({ storeId }) => ({ url: "/tenant/staff", params: { limit: 100, ...(storeId ? { storeId } : {}) } }), transformResponse: (r: any) => unwrapList(r, "staff"), providesTags: ["Staff"] }),
+    createStaff: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/staff", method: "POST", body }), invalidatesTags: ["Staff"] }),
+    updateStaff: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/staff/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Staff"] }),
+    adjustStock: builder.mutation<any, { storeId: string; productId: string; variantId?: string; quantity: number; reason: string }>({
+      query: ({ storeId, productId, variantId, quantity, reason }) => ({ url: "/tenant/inventory/movements", method: "POST", body: { storeId, productId, variantId, quantity, type: "ADJUSTMENT", referenceId: `DESKTOP-${crypto.randomUUID()}`, referenceType: "ManualAdjustment", reason } }),
+      invalidatesTags: ["Products", "Inventory"],
+    }),
+    getPurchaseOrders: builder.query<any[], void>({ query: () => ({ url: "/tenant/purchase-orders", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "purchaseOrders"), providesTags: ["PurchaseOrders"] }),
+    createPurchaseOrder: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/purchase-orders", method: "POST", body }), invalidatesTags: ["PurchaseOrders"] }),
+    updatePurchaseOrder: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/purchase-orders/${id}`, method: "PUT", body: patch }), invalidatesTags: ["PurchaseOrders"] }),
+    receivePurchaseOrder: builder.mutation<any, { id: string; storeId: string }>({ query: ({ id, storeId }) => ({ url: `/tenant/purchase-orders/${id}/receive`, method: "POST", body: { storeId } }), invalidatesTags: ["PurchaseOrders", "Products", "Inventory"] }),
+    getExpenses: builder.query<any[], void>({ query: () => "/tenant/expenses", transformResponse: (r: any) => unwrapList(r, "expenses"), providesTags: ["Expenses"] }),
+    createExpense: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/expenses", method: "POST", body }), invalidatesTags: ["Expenses"] }),
+    getExpenseCategories: builder.query<any[], void>({ query: () => "/tenant/expense-categories", transformResponse: (r: any) => unwrapList(r, "categories"), providesTags: ["ExpenseCategories"] }),
+    createExpenseCategory: builder.mutation<any, { name: string; description?: string }>({ query: (body) => ({ url: "/tenant/expense-categories", method: "POST", body }), invalidatesTags: ["ExpenseCategories"] }),
+    getSupplierPayments: builder.query<any[], void>({ query: () => ({ url: "/tenant/supplier-payments", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "payments"), providesTags: ["SupplierPayments"] }),
+    createSupplierPayment: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/supplier-payments", method: "POST", body }), invalidatesTags: ["SupplierPayments", "Suppliers"] }),
+    getStockTransfers: builder.query<any[], void>({ query: () => ({ url: "/tenant/stock-transfers", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "stockTransfers"), providesTags: ["StockTransfers"] }),
+    createStockTransfer: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/stock-transfers", method: "POST", body }), invalidatesTags: ["StockTransfers"] }),
+    completeStockTransfer: builder.mutation<any, string>({ query: (id) => ({ url: `/tenant/stock-transfers/${id}/complete`, method: "POST" }), invalidatesTags: ["StockTransfers", "Products", "Inventory"] }),
+    getReturns: builder.query<any[], void>({ query: () => ({ url: "/tenant/returns", params: { limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "returns"), providesTags: ["Returns"] }),
+    getAuditLogs: builder.query<{ logs: any[]; meta: { total: number; page: number; limit: number; totalPages: number } }, { page?: number; limit?: number; action?: string; entity?: string; userId?: string }>({
+      query: ({ page = 1, limit = 50, ...filters }) => ({ url: "/tenant/audit-logs", params: { page, limit, ...filters } }),
+      transformResponse: (response: any) => ({ logs: response?.logs ?? response?.data?.logs ?? [], meta: response?.meta ?? response?.data?.meta ?? { total: 0, page: 1, limit: 50, totalPages: 0 } }),
+      providesTags: ["AuditLogs"],
+    }),
+    getPromotions: builder.query<any[], void>({ query: () => ({ url: "/tenant/promotions", params: { page: 1, limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "promotions"), providesTags: ["Promotions"] }),
+    createPromotion: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/promotions", method: "POST", body }), invalidatesTags: ["Promotions"] }),
+    updatePromotion: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/promotions/${id}`, method: "PUT", body: patch }), invalidatesTags: ["Promotions"] }),
+    getTaxRates: builder.query<any[], void>({ query: () => "/tenant/tax-rates", transformResponse: (r: any) => unwrapList(r, "taxRates"), providesTags: ["TaxRates"] }),
+    createTaxRate: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/tax-rates", method: "POST", body }), invalidatesTags: ["TaxRates"] }),
+    updateTaxRate: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({ query: ({ id, patch }) => ({ url: `/tenant/tax-rates/${id}`, method: "PUT", body: patch }), invalidatesTags: ["TaxRates"] }),
+    getCashRegisters: builder.query<any[], { storeId?: string }>({ query: ({ storeId }) => ({ url: "/tenant/cash-registers", params: { page: 1, limit: 100, ...(storeId ? { storeId } : {}) } }), transformResponse: (r: any) => unwrapList(r, "cashRegisters"), providesTags: ["CashRegisters"] }),
+    createCashRegister: builder.mutation<any, { storeId: string; name: string }>({ query: (body) => ({ url: "/tenant/cash-registers", method: "POST", body }), invalidatesTags: ["CashRegisters"] }),
+    getGiftCards: builder.query<any[], void>({ query: () => ({ url: "/tenant/gift-cards", params: { page: 1, limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "giftCards"), providesTags: ["GiftCards"] }),
+    issueGiftCard: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/gift-cards", method: "POST", body }), invalidatesTags: ["GiftCards"] }),
+    reloadGiftCard: builder.mutation<any, { id: string; amount: number }>({ query: ({ id, amount }) => ({ url: `/tenant/gift-cards/${id}/reload`, method: "POST", body: { amount } }), invalidatesTags: ["GiftCards"] }),
+    updateGiftCardStatus: builder.mutation<any, { id: string; status: string }>({ query: ({ id, status }) => ({ url: `/tenant/gift-cards/${id}/status`, method: "PATCH", body: { status } }), invalidatesTags: ["GiftCards"] }),
+    getWallets: builder.query<any[], void>({ query: () => ({ url: "/tenant/wallets", params: { page: 1, limit: 100 } }), transformResponse: (r: any) => unwrapList(r, "wallets"), providesTags: ["Wallets"] }),
+    createWalletTransaction: builder.mutation<any, { customerId: string; amount: number; type: "DEPOSIT" | "WITHDRAWAL" | "REFUND" | "PAYMENT"; description?: string }>({ query: (body) => ({ url: "/tenant/wallets/transactions", method: "POST", body }), invalidatesTags: ["Wallets", "Customers"] }),
+    createReturn: builder.mutation<any, Record<string, unknown>>({ query: (body) => ({ url: "/tenant/returns", method: "POST", body }), invalidatesTags: ["Returns", "Orders", "Products", "Inventory"] }),
 
     // Stores
     getStores: builder.query<Store[], void>({
       query: () => "/tenant/stores",
-      transformResponse: (res: any) => res?.data || res || [],
+      transformResponse: (res: any) => unwrapList(res, "stores"),
       providesTags: ["Stores"],
     }),
 
     // Sessions
-    getSessions: builder.query<Session[], void>({
-      query: () => "/tenant/sessions",
-      transformResponse: (res: any) => res?.data || res || [],
+    getSessions: builder.query<Session[], { storeId?: string }>({
+      query: ({ storeId }) => ({ url: "/tenant/sessions", params: { limit: 100, ...(storeId ? { storeId } : {}) } }),
+      transformResponse: (res: any) => unwrapList(res, "sessions").map((s: any) => ({
+        ...s,
+        cashierName: s.cashierName ?? s.user?.name ?? s.user?.email ?? "—",
+      })),
       providesTags: ["Sessions"],
+    }),
+
+    getOrders: builder.query<ApiOrder[], { storeId?: string }>({
+      query: ({ storeId }) => ({ url: "/tenant/orders", params: { limit: 100, ...(storeId ? { storeId } : {}) } }),
+      transformResponse: (response: any) => unwrapList(response, "orders").map((order: any) => ({
+        ...order,
+        grandTotal: Number(order.grandTotal) || 0,
+      })),
+      providesTags: ["Orders"],
     }),
 
     openSession: builder.mutation<Session, { storeId: string; openingBalance: number }>({
       query: (body) => ({
-        url: "/tenant/sessions",
+        url: "/tenant/sessions/open",
         method: "POST",
         body,
       }),
@@ -132,6 +229,10 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Orders", "Products", "Sessions"],
     }),
+    completeOrder: builder.mutation<any, string>({
+      query: (orderId) => ({ url: `/tenant/orders/${orderId}/complete`, method: "PATCH" }),
+      invalidatesTags: ["Orders", "Products", "Sessions"],
+    }),
 
     // Auth
     login: builder.mutation<
@@ -151,10 +252,60 @@ export const {
   useGetHealthQuery,
   useGetProductsQuery,
   useCreateProductMutation,
+  useCreateCatalogProductMutation,
+  useUpdateCatalogProductMutation,
+  useGetCategoriesQuery,
+  useCreateCategoryMutation,
+  useUpdateCategoryMutation,
+  useGetBrandsQuery,
+  useCreateBrandMutation,
+  useUpdateBrandMutation,
+  useGetSuppliersQuery,
+  useCreateSupplierMutation,
+  useUpdateSupplierMutation,
+  useGetCustomersQuery,
+  useCreateCustomerMutation,
+  useUpdateCustomerMutation,
+  useGetStaffQuery,
+  useCreateStaffMutation,
+  useUpdateStaffMutation,
+  useAdjustStockMutation,
+  useGetPurchaseOrdersQuery,
+  useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
+  useReceivePurchaseOrderMutation,
+  useGetExpensesQuery,
+  useCreateExpenseMutation,
+  useGetExpenseCategoriesQuery,
+  useCreateExpenseCategoryMutation,
+  useGetSupplierPaymentsQuery,
+  useCreateSupplierPaymentMutation,
+  useGetStockTransfersQuery,
+  useCreateStockTransferMutation,
+  useCompleteStockTransferMutation,
+  useGetReturnsQuery,
+  useCreateReturnMutation,
+  useGetAuditLogsQuery,
+  useGetPromotionsQuery,
+  useCreatePromotionMutation,
+  useUpdatePromotionMutation,
+  useGetTaxRatesQuery,
+  useCreateTaxRateMutation,
+  useUpdateTaxRateMutation,
+  useGetCashRegistersQuery,
+  useCreateCashRegisterMutation,
+  useGetGiftCardsQuery,
+  useIssueGiftCardMutation,
+  useReloadGiftCardMutation,
+  useUpdateGiftCardStatusMutation,
+  useGetWalletsQuery,
+  useCreateWalletTransactionMutation,
   useGetStoresQuery,
   useGetSessionsQuery,
+  useGetOrdersQuery,
   useOpenSessionMutation,
   useCloseSessionMutation,
   useCreateOrderMutation,
+  useCompleteOrderMutation,
   useLoginMutation,
 } = kanittApi;

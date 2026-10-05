@@ -7,6 +7,7 @@ export interface Product {
   stock: number;
   barcode: string;
   image?: string;
+  variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number }[];
 }
 
 export interface CartItem extends Product {

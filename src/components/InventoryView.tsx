@@ -1,4 +1,5 @@
-import { Search, Plus } from "lucide-react";
+import { Search } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Product } from "../types";
 
 interface InventoryViewProps {
@@ -6,18 +7,21 @@ interface InventoryViewProps {
 }
 
 export function InventoryView({ products }: InventoryViewProps) {
+  const [query, setQuery] = useState("");
+  const visibleProducts = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return products;
+    return products.filter((product) => [product.name, product.sku, product.barcode].some((value) => value.toLowerCase().includes(normalized)));
+  }, [products, query]);
   return (
     <main className="flex-1 flex flex-col p-6 overflow-y-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-black text-white">Products & Stock</h2>
           <p className="text-xs text-slate-400 mt-1">
-            {products.length} products · Last synced 2 min ago
+            {products.length} products loaded from the selected store
           </p>
         </div>
-        <button className="bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors">
-          <Plus className="w-4 h-4" /> Add Product
-        </button>
       </div>
 
       {/* Search */}
@@ -26,6 +30,8 @@ export function InventoryView({ products }: InventoryViewProps) {
         <input
           type="text"
           placeholder="Search by name, SKU, barcode..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
           className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
         />
       </div>
@@ -44,7 +50,7 @@ export function InventoryView({ products }: InventoryViewProps) {
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
+            {visibleProducts.map((product) => (
               <tr
                 key={product.id}
                 className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors cursor-pointer"
@@ -78,6 +84,7 @@ export function InventoryView({ products }: InventoryViewProps) {
                 </td>
               </tr>
             ))}
+            {visibleProducts.length === 0 && <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-400">No matching products found.</td></tr>}
           </tbody>
         </table>
       </div>

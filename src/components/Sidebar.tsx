@@ -1,161 +1,34 @@
-import { ShoppingBag, Package, Clock, Settings, Store as StoreIcon, Wifi, WifiOff, RefreshCw, LogOut } from "lucide-react";
+import { Activity, BadgePercent, BriefcaseBusiness, Boxes, Cloud, ClipboardList, Clock3, LayoutDashboard, LogOut, ReceiptText, RefreshCw, Settings2, ShoppingBag, Store as StoreIcon, Users, Wifi, WifiOff, type LucideIcon } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
 
+type Tab = "dashboard" | "pos" | "orders" | "inventory" | "sessions" | "manage" | "erp" | "commerce" | "activity" | "sync" | "settings";
 interface SidebarProps {
-  activeTab: "pos" | "inventory" | "sessions" | "settings";
-  setActiveTab: (tab: "pos" | "inventory" | "sessions" | "settings") => void;
-  isConnected: boolean;
-  isLoading: boolean;
-  syncWithServer: () => void;
-  stores: ApiStore[];
-  selectedStore: ApiStore | null;
-  setSelectedStore: (store: ApiStore) => void;
-  onLogout: () => void;
+  activeTab: Tab; setActiveTab: (tab: Tab) => void; isConnected: boolean; isLoading: boolean;
+  syncWithServer: () => void; stores: ApiStore[]; selectedStore: ApiStore | null;
+  setSelectedStore: (store: ApiStore) => void; storeError: boolean; onLogout: () => void;
 }
+const groups: { name: string; items: { id: Tab; label: string; icon: LucideIcon }[] }[] = [
+  { name: "Workspace", items: [{ id: "dashboard", label: "Overview", icon: LayoutDashboard }, { id: "pos", label: "Point of sale", icon: ShoppingBag }] },
+  { name: "Sales & stock", items: [{ id: "orders", label: "Orders & returns", icon: ReceiptText }, { id: "inventory", label: "Inventory", icon: Boxes }, { id: "sessions", label: "Register sessions", icon: Clock3 }] },
+  { name: "Operations", items: [{ id: "erp", label: "ERP operations", icon: BriefcaseBusiness }, { id: "commerce", label: "Pricing & finance", icon: BadgePercent }, { id: "manage", label: "Catalog & people", icon: Users }, { id: "activity", label: "Audit trail", icon: ClipboardList }] },
+  { name: "System", items: [{ id: "sync", label: "Sync status", icon: Cloud }, { id: "settings", label: "Settings", icon: Settings2 }] },
+];
 
-export function Sidebar({
-  activeTab,
-  setActiveTab,
-  isConnected,
-  isLoading,
-  syncWithServer,
-  stores,
-  selectedStore,
-  setSelectedStore,
-  onLogout,
-}: SidebarProps) {
-  return (
-    <aside className="w-20 lg:w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between p-4">
-      <div>
-        {/* App Brand Header */}
-        <div className="flex items-center justify-between px-2 py-3 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-emerald-400 flex items-center justify-center text-white shadow-lg shadow-sky-500/20 font-bold text-xl">
-              K
-            </div>
-            <div className="hidden lg:block">
-              <h1 className="font-bold text-lg text-white leading-tight">KANITT POS</h1>
-              <p className="text-xs text-sky-400 font-medium">Desktop Pro v2.1</p>
-            </div>
-          </div>
+export function Sidebar({ activeTab, setActiveTab, isConnected, isLoading, syncWithServer, stores, selectedStore, setSelectedStore, storeError, onLogout }: SidebarProps) {
+  return <aside className="flex h-screen w-[76px] shrink-0 flex-col border-r border-slate-800/80 bg-[#0b1220] px-2.5 py-3 lg:w-[252px] lg:px-3.5">
+    <div className="mb-5 flex h-12 items-center gap-3 px-1.5 lg:px-2">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-cyan-400 to-sky-600 text-lg font-black text-slate-950 shadow-lg shadow-sky-500/20">K</div>
+      <div className="hidden min-w-0 flex-1 lg:block"><h1 className="truncate text-sm font-extrabold tracking-wide text-white">KANITT</h1><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Retail workspace</p></div>
+      <button onClick={syncWithServer} disabled={isLoading} title="Refresh workspace data" className="hidden rounded-lg p-2 text-slate-500 transition hover:bg-slate-800 hover:text-white disabled:opacity-40 lg:block"><RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin text-sky-300" : ""}`} /></button>
+    </div>
 
-          {/* Sync Refresh Button */}
-          <button
-            onClick={syncWithServer}
-            disabled={isLoading}
-            title="Sync with Server"
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-sky-400" : ""}`} />
-          </button>
-        </div>
+    <div className="mb-4 rounded-xl border border-slate-800 bg-slate-900/70 p-2 lg:p-2.5">
+      <div className="flex items-center justify-center gap-2 lg:justify-start"><span className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-amber-400"}`} /><span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-500 lg:block">{isConnected ? "Server connected" : "Offline mode"}</span><span className="ml-auto hidden text-[10px] text-slate-600 lg:block">{isConnected ? "LIVE" : "LOCAL"}</span></div>
+      <div className="mt-2 hidden items-center gap-2 border-t border-slate-800 pt-2 lg:flex"><StoreIcon className="h-3.5 w-3.5 shrink-0 text-sky-300" />{stores.length ? <select aria-label="Active store" value={selectedStore?.id || ""} onChange={(event) => { const store = stores.find((candidate) => candidate.id === event.target.value); if (store) setSelectedStore(store); }} className="w-full min-w-0 bg-transparent text-xs font-semibold text-slate-200 outline-none">{stores.map((store) => <option key={store.id} value={store.id} className="bg-slate-900">{store.name}</option>)}</select> : <span className="truncate text-xs text-slate-500">{storeError ? "Stores unavailable" : "No stores"}</span>}</div>
+    </div>
 
-        {/* Navigation Links */}
-        <nav className="space-y-1.5">
-          <button
-            onClick={() => setActiveTab("pos")}
-            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all ${
-              activeTab === "pos"
-                ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-            }`}
-          >
-            <ShoppingBag className="w-5 h-5" />
-            <span className="hidden lg:inline">Point of Sale</span>
-          </button>
+    <nav className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" aria-label="Main navigation">{groups.map((group) => <div key={group.name}><p className="mb-1.5 hidden px-3 text-[9px] font-extrabold uppercase tracking-[0.2em] text-slate-600 lg:block">{group.name}</p><div className="space-y-1">{group.items.map(({ id, label, icon: Icon }) => { const active = activeTab === id; return <button key={id} type="button" title={label} aria-current={active ? "page" : undefined} onClick={() => setActiveTab(id)} className={`group relative flex w-full items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs font-semibold transition-all lg:justify-start lg:px-3 ${active ? "bg-sky-400/10 text-sky-200 ring-1 ring-inset ring-sky-300/15" : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-100"}`}><span className={`absolute bottom-2 left-0 top-2 hidden w-[3px] rounded-r-full bg-sky-300 lg:block ${active ? "opacity-100" : "opacity-0"}`} /><Icon className={`h-[17px] w-[17px] shrink-0 ${active ? "text-sky-300" : "text-slate-500 group-hover:text-slate-300"}`} /><span className="hidden flex-1 lg:block">{label}</span>{id === "activity" && <span className="hidden h-1.5 w-1.5 rounded-full bg-violet-400 lg:block" />}</button>; })}</div></div>)}</nav>
 
-          <button
-            onClick={() => setActiveTab("inventory")}
-            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all ${
-              activeTab === "inventory"
-                ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-            }`}
-          >
-            <Package className="w-5 h-5" />
-            <span className="hidden lg:inline">Products & Stock</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("sessions")}
-            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all ${
-              activeTab === "sessions"
-                ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-            }`}
-          >
-            <Clock className="w-5 h-5" />
-            <span className="hidden lg:inline">Session Logs</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl font-medium transition-all ${
-              activeTab === "settings"
-                ? "bg-sky-500 text-white shadow-lg shadow-sky-500/25"
-                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-            }`}
-          >
-            <Settings className="w-5 h-5" />
-            <span className="hidden lg:inline">Store Settings</span>
-          </button>
-        </nav>
-      </div>
-
-      {/* Server Connection & Store Badge Footer */}
-      <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/80 hidden lg:block space-y-2">
-        {/* Server Connection Indicator */}
-        <div className="flex items-center justify-between text-xs font-semibold">
-          <span className="text-slate-400 flex items-center gap-1.5">
-            {isConnected ? (
-              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-            ) : (
-              <WifiOff className="w-3.5 h-3.5 text-amber-400" />
-            )}
-            kanitt_server
-          </span>
-          <span
-            className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-              isConnected
-                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-            }`}
-          >
-            {isConnected ? "Connected" : "Offline"}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 border-t border-slate-800/60">
-          <StoreIcon className="w-3.5 h-3.5 text-sky-400" />
-          {stores.length > 0 ? (
-            <select
-              value={selectedStore?.id || ""}
-              onChange={(e) => {
-                const found = stores.find((s) => s.id === e.target.value);
-                if (found) setSelectedStore(found);
-              }}
-              className="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer w-full"
-            >
-              {stores.map((s) => (
-                <option key={s.id} value={s.id} className="bg-slate-900 text-white">
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="text-xs font-semibold text-slate-300 truncate">Main Store (Yangon)</span>
-          )}
-        </div>
-
-        {/* Logout button */}
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-2 w-full mt-2 px-2 py-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all text-xs font-semibold"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span className="hidden lg:inline">Sign Out</span>
-        </button>
-      </div>
-    </aside>
-  );
+    <div className="border-t border-slate-800 pt-2"><div className="mb-2 flex justify-center px-2 text-[10px] text-slate-500 lg:hidden">{isConnected ? <Wifi className="h-4 w-4 text-emerald-400" /> : <WifiOff className="h-4 w-4 text-amber-400" />}</div><button onClick={onLogout} title="Sign out" className="flex w-full items-center justify-center gap-3 rounded-xl px-2.5 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-rose-500/10 hover:text-rose-300 lg:justify-start lg:px-3"><LogOut className="h-4 w-4" /><span className="hidden lg:block">Sign out</span></button><div className="mt-2 hidden items-center gap-2 px-3 text-[9px] text-slate-600 lg:flex"><Activity className="h-3 w-3" />Desktop · Kanitt POS</div></div>
+  </aside>;
 }

@@ -1,7 +1,13 @@
 @import "tailwindcss";
 
 @layer base {
+  * { box-sizing: border-box; }
   body {
     @apply bg-slate-950 text-slate-100 font-sans antialiased select-none overflow-hidden;
+    margin: 0;
+    min-width: 1024px;
+    min-height: 680px;
   }
+  button, input, select { font: inherit; }
+  button { cursor: pointer; }
 }
