@@ -105,34 +105,6 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() => readQueuedSales());
   const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(null);
 
-  // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "F1") {
-        e.preventDefault();
-        setActiveTab("pos");
-        // Focus search input
-        const searchInput = document.querySelector<HTMLInputElement>('input[placeholder*="barcode"]');
-        searchInput?.focus();
-      } else if (e.key === "F2") {
-        e.preventDefault();
-        if (activeTab === "pos" && cart.length > 0 && !isPricingLoading && !pricingError) {
-          setPaymentModalOpen(true);
-        }
-      } else if (e.key === "Escape") {
-        if (paymentModalOpen) {
-          e.preventDefault();
-          setPaymentModalOpen(false);
-        } else if (currentReceipt) {
-          e.preventDefault();
-          setCurrentReceipt(null);
-        }
-      }
-    };
-    window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [activeTab, cart.length, isPricingLoading, pricingError, paymentModalOpen, currentReceipt]);
-
   // RTK Query — live data from kanitt_server
   const {
     data: healthData,
@@ -201,6 +173,34 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
   const [completeOrderApi, { isLoading: isCompletingOrder }] =
     useCompleteOrderMutation();
+
+  // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        setActiveTab("pos");
+        // Focus search input
+        const searchInput = document.querySelector<HTMLInputElement>('input[placeholder*="barcode"]');
+        searchInput?.focus();
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        if (activeTab === "pos" && cart.length > 0 && !isPricingLoading && !pricingError) {
+          setPaymentModalOpen(true);
+        }
+      } else if (e.key === "Escape") {
+        if (paymentModalOpen) {
+          e.preventDefault();
+          setPaymentModalOpen(false);
+        } else if (currentReceipt) {
+          e.preventDefault();
+          setCurrentReceipt(null);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [activeTab, cart.length, isPricingLoading, pricingError, paymentModalOpen, currentReceipt]);
   const [createCatalogProduct] = useCreateCatalogProductMutation();
   const [updateCatalogProduct] = useUpdateCatalogProductMutation();
   const [createCategory] = useCreateCategoryMutation();
