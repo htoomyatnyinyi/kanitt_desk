@@ -62,6 +62,7 @@ import { SyncView } from "./components/SyncView";
 import { ERPView } from "./components/ERPView";
 import { ActivityLogView } from "./components/ActivityLogView";
 import { BusinessToolsView } from "./components/BusinessToolsView";
+import { AdminView } from "./components/AdminView";
 import { queueSale, readQueuedSales, removeQueuedSale, updateQueuedSaleError, type QueuedSale } from "./services/offlineSalesQueue";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
@@ -78,6 +79,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     | "commerce"
     | "sync"
     | "settings"
+    | "admin"
   >("dashboard");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -559,6 +561,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       )}
       {activeTab === "activity" && <ActivityLogView />}
       {activeTab === "commerce" && <BusinessToolsView storeId={selectedStore?.id} />}
+      {activeTab === "admin" && <AdminView stores={stores} />}
       {activeTab === "sync" && (
         <SyncView
           connected={isConnected}

@@ -1,7 +1,7 @@
-import { Activity, BadgePercent, BriefcaseBusiness, Boxes, Cloud, ClipboardList, Clock3, LayoutDashboard, LogOut, ReceiptText, RefreshCw, Settings2, ShoppingBag, Store as StoreIcon, Users, Wifi, WifiOff, type LucideIcon } from "lucide-react";
+import { Activity, BadgePercent, BriefcaseBusiness, Boxes, Cloud, ClipboardList, Clock3, LayoutDashboard, LogOut, ReceiptText, RefreshCw, Settings2, ShieldCheck, ShoppingBag, Store as StoreIcon, Users, Wifi, WifiOff, type LucideIcon } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
 
-type Tab = "dashboard" | "pos" | "orders" | "inventory" | "sessions" | "manage" | "erp" | "commerce" | "activity" | "sync" | "settings";
+type Tab = "dashboard" | "pos" | "orders" | "inventory" | "sessions" | "manage" | "erp" | "commerce" | "activity" | "sync" | "settings" | "admin";
 interface SidebarProps {
   activeTab: Tab; setActiveTab: (tab: Tab) => void; isConnected: boolean; isLoading: boolean;
   syncWithServer: () => void; stores: ApiStore[]; selectedStore: ApiStore | null;
@@ -11,7 +11,7 @@ const groups: { name: string; items: { id: Tab; label: string; icon: LucideIcon 
   { name: "Workspace", items: [{ id: "dashboard", label: "Overview", icon: LayoutDashboard }, { id: "pos", label: "Point of sale", icon: ShoppingBag }] },
   { name: "Sales & stock", items: [{ id: "orders", label: "Orders & returns", icon: ReceiptText }, { id: "inventory", label: "Inventory", icon: Boxes }, { id: "sessions", label: "Register sessions", icon: Clock3 }] },
   { name: "Operations", items: [{ id: "erp", label: "ERP operations", icon: BriefcaseBusiness }, { id: "commerce", label: "Pricing & finance", icon: BadgePercent }, { id: "manage", label: "Catalog & people", icon: Users }, { id: "activity", label: "Audit trail", icon: ClipboardList }] },
-  { name: "System", items: [{ id: "sync", label: "Sync status", icon: Cloud }, { id: "settings", label: "Settings", icon: Settings2 }] },
+  { name: "System", items: [{ id: "admin", label: "Admin workspace", icon: ShieldCheck }, { id: "sync", label: "Sync status", icon: Cloud }, { id: "settings", label: "Settings", icon: Settings2 }] },
 ];
 
 export function Sidebar({ activeTab, setActiveTab, isConnected, isLoading, syncWithServer, stores, selectedStore, setSelectedStore, storeError, onLogout }: SidebarProps) {
