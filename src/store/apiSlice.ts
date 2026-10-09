@@ -64,6 +64,9 @@ export interface ApiOrder {
   status: string;
   paymentStatus?: string;
   paymentMethod?: string;
+  subTotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
   grandTotal: number;
   items?: {
     id: string;

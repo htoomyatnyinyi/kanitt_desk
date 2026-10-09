@@ -1,14 +1,10 @@
 import { useMemo, useState } from "react";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
   BarChart3,
-  Calendar,
   Download,
   DollarSign,
   Package,
   PieChart,
-  RefreshCw,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -30,9 +26,6 @@ export function ReportsView({
   orders = [],
   products = [],
   expenses = [],
-  returns = [],
-  purchaseOrders = [],
-  isLoading = false,
 }: ReportsViewProps) {
   const [range, setRange] = useState<"today" | "7d" | "30d" | "all">("7d");
   const [activeTab, setActiveTab] = useState<"sales" | "profit" | "stock" | "products">("sales");
@@ -158,9 +151,9 @@ export function ReportsView({
       o.orderNumber || o.id,
       new Date(o.createdAt).toLocaleString(),
       o.items?.length || 0,
-      o.subTotal,
-      o.taxAmount,
-      o.discountAmount,
+      o.subTotal || 0,
+      o.taxAmount || 0,
+      o.discountAmount || 0,
       o.grandTotal,
       o.paymentMethod || "CASH",
     ]);

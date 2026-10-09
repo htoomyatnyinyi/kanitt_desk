@@ -64,6 +64,7 @@ import { ActivityLogView } from "./components/ActivityLogView";
 import { BusinessToolsView } from "./components/BusinessToolsView";
 import { AdminView } from "./components/AdminView";
 import { ReportsView } from "./components/ReportsView";
+import { ReceiptModal, ReceiptData } from "./components/ReceiptModal";
 import { queueSale, readQueuedSales, removeQueuedSale, updateQueuedSaleError, type QueuedSale } from "./services/offlineSalesQueue";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
@@ -102,6 +103,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() => readQueuedSales());
+  const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(null);
 
   // RTK Query — live data from kanitt_server
   const {
@@ -433,7 +435,25 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       );
       return;
     }
-    alert(`Order completed! Change: ${changeAmount.toLocaleString()} MMK`);
+    const completedReceiptData: ReceiptData = {
+      orderNumber: checkoutOrderNumber,
+      createdAt: new Date().toISOString(),
+      storeName: selectedStore?.name,
+      items: cart.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        subTotal: item.price * item.quantity,
+      })),
+      subTotal: subtotal,
+      taxAmount: tax,
+      discountAmount: discount,
+      grandTotal: total,
+      paymentMethod,
+      receivedAmount: Number(receivedAmount) || total,
+      changeAmount,
+    };
+    setCurrentReceipt(completedReceiptData);
     setCart([]);
     setPromotionCode("");
     setPromotionInput("");
@@ -637,6 +657,11 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         isLoading={isCheckoutLoading || isCompletingOrder}
         error={checkoutError}
         onDismissError={() => setCheckoutError(null)}
+      />
+
+      <ReceiptModal
+        receipt={currentReceipt}
+        onClose={() => setCurrentReceipt(null)}
       />
     </div>
   );
