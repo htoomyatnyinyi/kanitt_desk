@@ -601,6 +601,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           lastSync={lastSync}
           onSync={syncWithServer}
           queuedSales={queuedSales}
+          onDiscardSale={(id) => setQueuedSales(removeQueuedSale(id))}
         />
       )}
 
@@ -613,6 +614,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             setSelectedCategory={setSelectedCategory}
             categories={categories}
             filteredProducts={filteredProducts}
+            allProducts={products}
             addToCart={addToCart}
           />
           <CartView
