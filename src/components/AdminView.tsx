@@ -1,10 +1,11 @@
 import { FormEvent, useState } from "react";
-import { Bell, BellOff, Building2, Check, ChevronLeft, ChevronRight, ClipboardCopy, CreditCard, Eye, EyeOff, Key, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
-import { useGetTenantProfileQuery, useUpdateTenantProfileMutation, useGetStoreSettingsQuery, useUpsertStoreSettingMutation, useDeleteStoreSettingMutation, useGetApiKeysQuery, useCreateApiKeyMutation, useRevokeApiKeyMutation, useGetSubscriptionQuery, useGetNotificationsQuery, useMarkNotificationReadMutation, useMarkAllNotificationsReadMutation, useDeleteNotificationMutation } from "../store/apiSlice";
+import { Bell, BellOff, Building2, Check, ChevronLeft, ChevronRight, ClipboardCopy, CreditCard, Eye, EyeOff, Key, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { useGetTenantProfileQuery, useUpdateTenantProfileMutation, useGetStoreSettingsQuery, useUpsertStoreSettingMutation, useDeleteStoreSettingMutation, useGetApiKeysQuery, useCreateApiKeyMutation, useRevokeApiKeyMutation, useGetSubscriptionQuery, useGetNotificationsQuery, useMarkNotificationReadMutation, useMarkAllNotificationsReadMutation, useDeleteNotificationMutation, useGetStaffQuery } from "../store/apiSlice";
 
-type Module = "profile" | "store-settings" | "api-keys" | "subscription" | "notifications";
+type Module = "profile" | "users" | "store-settings" | "api-keys" | "subscription" | "notifications";
 const modules: { id: Module; label: string; caption: string; icon: typeof Settings2 }[] = [
   { id: "profile", label: "Business profile", caption: "Org name, email, phone", icon: Building2 },
+  { id: "users", label: "Staff & users", caption: "User roles & access", icon: Users },
   { id: "store-settings", label: "Store settings", caption: "Per-store config keys", icon: Settings2 },
   { id: "api-keys", label: "API keys", caption: "Integrations & tokens", icon: Key },
   { id: "subscription", label: "Subscription", caption: "Plan & billing history", icon: CreditCard },
@@ -46,6 +47,51 @@ function ProfilePanel() {
         </div>
       )}
       {profile?.subscription && (<div className="rounded-2xl border border-sky-400/20 bg-sky-400/5 p-4"><p className="text-xs font-bold uppercase tracking-wider text-sky-300">Current plan</p><p className="mt-1 text-sm font-semibold text-white">{profile.subscription.plan?.name ?? "—"}</p><p className="mt-0.5 text-xs text-slate-400">Expires: {profile.subscription.expiresAt ? new Date(profile.subscription.expiresAt).toLocaleDateString() : "Ongoing"}</p></div>)}
+    </div>
+  );
+}
+
+function UsersPanel() {
+  const { data: staffList = [], isFetching, refetch } = useGetStaffQuery({});
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-white">Tenant users & staff</h2>
+          <p className="text-xs text-slate-400">View team members and role access across branches.</p>
+        </div>
+        <button onClick={() => void refetch()} className={btnGhost}><RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} /></button>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50">
+        {staffList.length === 0 ? (
+          <div className="p-12 text-center">
+            <Users className="mx-auto h-8 w-8 text-slate-600" />
+            <p className="mt-3 font-semibold text-slate-200">No staff members listed</p>
+            <p className="mt-1 text-xs text-slate-500">Staff and managers assigned to your workspace will appear here.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800">
+            {staffList.map((user: any) => (
+              <div key={user.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 hover:bg-slate-800/30">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-slate-100">{user.name || user.email}</p>
+                    <span className="rounded-full bg-violet-400/10 px-2 py-0.5 text-[10px] font-bold text-violet-300">
+                      {user.role || "CASHIER"}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400">{user.email || user.phone || "—"}</p>
+                </div>
+                <div className="text-right text-[11px] text-slate-500">
+                  <p>Store: {user.store?.name || "All stores"}</p>
+                  <p>Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -204,6 +250,7 @@ export function AdminView({ stores, currentUserId }: AdminViewProps) {
         </div>
         <section>
           {module === "profile" && <ProfilePanel />}
+          {module === "users" && <UsersPanel />}
           {module === "store-settings" && <StoreSettingsPanel stores={stores} />}
           {module === "api-keys" && <ApiKeysPanel currentUserId={currentUserId} />}
           {module === "subscription" && <SubscriptionPanel />}
