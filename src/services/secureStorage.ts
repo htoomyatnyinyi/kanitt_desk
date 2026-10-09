@@ -8,13 +8,14 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
   try {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       // Dynamic import Tauri Store if in Tauri runtime
-      const { LazyStore } = await import("@tauri-apps/plugin-store");
+      const moduleName = "@tauri-apps/plugin-store";
+      const { LazyStore }: any = await import(/* @vite-ignore */ moduleName);
       const store = new LazyStore(".settings.dat");
       await store.set(key, value);
       await store.save();
     }
-  } catch (err) {
-    console.warn("Tauri secure store write error, falling back to localStorage:", err);
+  } catch {
+    // Tauri store unavailable in web browser runtime
   }
   // Standard localStorage persistence
   localStorage.setItem(key, value);
@@ -23,13 +24,14 @@ export async function setSecureItem(key: string, value: string): Promise<void> {
 export async function getSecureItem(key: string): Promise<string | null> {
   try {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      const { LazyStore } = await import("@tauri-apps/plugin-store");
+      const moduleName = "@tauri-apps/plugin-store";
+      const { LazyStore }: any = await import(/* @vite-ignore */ moduleName);
       const store = new LazyStore(".settings.dat");
-      const val = await store.get<string>(key);
-      if (val) return val;
+      const val = await store.get(key);
+      if (val) return String(val);
     }
-  } catch (err) {
-    console.warn("Tauri secure store read error, falling back to localStorage:", err);
+  } catch {
+    // Tauri store unavailable in web browser runtime
   }
   return localStorage.getItem(key);
 }
@@ -37,13 +39,14 @@ export async function getSecureItem(key: string): Promise<string | null> {
 export async function removeSecureItem(key: string): Promise<void> {
   try {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      const { LazyStore } = await import("@tauri-apps/plugin-store");
+      const moduleName = "@tauri-apps/plugin-store";
+      const { LazyStore }: any = await import(/* @vite-ignore */ moduleName);
       const store = new LazyStore(".settings.dat");
       await store.delete(key);
       await store.save();
     }
-  } catch (err) {
-    console.warn("Tauri secure store delete error, falling back to localStorage:", err);
+  } catch {
+    // Tauri store unavailable in web browser runtime
   }
   localStorage.removeItem(key);
 }
