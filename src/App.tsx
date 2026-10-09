@@ -669,18 +669,26 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   );
 }
 
+import { getAuthToken, removeAuthToken } from "./services/secureStorage";
+
 // ── Root App — auth gate only, no other hooks ──────────────────────────────
 export default function App() {
   const [token, setToken] = useState<string | null>(() =>
     localStorage.getItem("kanitt_token"),
   );
 
+  useEffect(() => {
+    void getAuthToken().then((t) => {
+      if (t && t !== token) setToken(t);
+    });
+  }, []);
+
   const handleLoginSuccess = (newToken: string) => {
     setToken(newToken);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("kanitt_token");
+    void removeAuthToken();
     setToken(null);
   };
 
