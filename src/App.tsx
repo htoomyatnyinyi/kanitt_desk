@@ -63,6 +63,7 @@ import { ERPView } from "./components/ERPView";
 import { ActivityLogView } from "./components/ActivityLogView";
 import { BusinessToolsView } from "./components/BusinessToolsView";
 import { AdminView } from "./components/AdminView";
+import { ReportsView } from "./components/ReportsView";
 import { queueSale, readQueuedSales, removeQueuedSale, updateQueuedSaleError, type QueuedSale } from "./services/offlineSalesQueue";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
@@ -75,6 +76,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     | "sessions"
     | "manage"
     | "erp"
+    | "reports"
     | "activity"
     | "commerce"
     | "sync"
@@ -560,6 +562,16 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {activeTab === "activity" && <ActivityLogView />}
+      {activeTab === "reports" && (
+        <ReportsView
+          orders={apiOrders}
+          products={products}
+          expenses={expenses}
+          returns={returns}
+          purchaseOrders={purchaseOrders}
+          isLoading={isOrdersLoading}
+        />
+      )}
       {activeTab === "commerce" && <BusinessToolsView storeId={selectedStore?.id} />}
       {activeTab === "admin" && <AdminView stores={stores} />}
       {activeTab === "sync" && (
