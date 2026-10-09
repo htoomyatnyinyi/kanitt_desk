@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Activity,
   BadgePercent,
   BarChart3,
   BriefcaseBusiness,
@@ -20,8 +19,6 @@ import {
   Store as StoreIcon,
   User,
   Users,
-  Wifi,
-  WifiOff,
   type LucideIcon,
 } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
