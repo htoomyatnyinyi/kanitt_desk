@@ -2,6 +2,10 @@ export interface Product {
   id: string;
   name: string;
   category: string;
+  categoryId?: string;
+  brandId?: string;
+  supplierId?: string;
+  costPrice?: number;
   price: number;
   sku: string;
   stock: number;

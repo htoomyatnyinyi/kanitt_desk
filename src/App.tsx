@@ -16,10 +16,15 @@ import {
   useCreateCatalogProductMutation,
   useUpdateCatalogProductMutation,
   useCreateCategoryMutation,
+  useUpdateCategoryMutation,
   useCreateBrandMutation,
+  useUpdateBrandMutation,
   useCreateSupplierMutation,
+  useUpdateSupplierMutation,
   useCreateCustomerMutation,
+  useUpdateCustomerMutation,
   useCreateStaffMutation,
+  useUpdateStaffMutation,
   useAdjustStockMutation,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
@@ -57,6 +62,7 @@ import { SyncView } from "./components/SyncView";
 import { ERPView } from "./components/ERPView";
 import { ActivityLogView } from "./components/ActivityLogView";
 import { BusinessToolsView } from "./components/BusinessToolsView";
+import { queueSale, readQueuedSales, removeQueuedSale, updateQueuedSaleError, type QueuedSale } from "./services/offlineSalesQueue";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
 function PosShell({ onLogout }: { onLogout: () => void }) {
@@ -91,6 +97,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   );
   const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() => readQueuedSales());
 
   // RTK Query — live data from kanitt_server
   const {
@@ -177,12 +184,38 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [createTransfer] = useCreateStockTransferMutation();
   const [completeTransfer] = useCompleteStockTransferMutation();
   const [createReturn] = useCreateReturnMutation();
+  const [updateCategory] = useUpdateCategoryMutation();
+  const [updateBrand] = useUpdateBrandMutation();
+  const [updateSupplier] = useUpdateSupplierMutation();
+  const [updateCustomer] = useUpdateCustomerMutation();
+  const [updateStaff] = useUpdateStaffMutation();
   const [openRegisterSession] = useOpenSessionMutation();
   const [closeRegisterSession] = useCloseSessionMutation();
 
   const isConnected =
     !isHealthError && !isProductsError && healthData?.status === "ok";
   const isRTKLoading = isHealthLoading || isProductsLoading;
+
+  const flushQueuedSales = async (force = false) => {
+    if ((!isConnected && !force) || queuedSales.length === 0) return;
+    for (const sale of queuedSales) {
+      try {
+        const result: any = await createOrderApi(sale.payload).unwrap();
+        const order = result?.order ?? result?.data?.order ?? result;
+        if (order?.id && order.status === "PENDING") await completeOrderApi(order.id).unwrap();
+        setQueuedSales(removeQueuedSale(sale.id));
+      } catch (error) {
+        const failure = error as { data?: { message?: string }; error?: string };
+        const message = failure.data?.message || failure.error || "Sale could not sync. Check its price and register session.";
+        setQueuedSales(updateQueuedSaleError(sale.id, message));
+        break;
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isConnected && queuedSales.length > 0) void flushQueuedSales();
+  }, [isConnected]);
 
   // Normalize API products — fix category union type to plain string
   const products: Product[] = (() => {
@@ -218,7 +251,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
         ...(promotionCode ? { promotionCode } : {}),
       }).unwrap().then((result) => {
-        if (!stale) setOrderPricing(result.quote);
+        if (!stale) setOrderPricing({ ...result.quote, quoteToken: result.quoteToken });
       }).catch((error: unknown) => {
         if (stale) return;
         const value = error as { data?: { message?: string }; error?: string };
@@ -235,6 +268,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   }, [stores, selectedStore]);
 
   const syncWithServer = async () => {
+    const health = await refetchHealth();
+    if (health.data?.status === "ok") await flushQueuedSales(true);
     await Promise.all([
       refetchHealth(),
       refetchProducts(),
@@ -329,8 +364,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         return;
       }
       try {
-        const result = await createOrderApi({
+        const payload = {
           orderNumber: checkoutOrderNumber,
+          pricingToken: orderPricing.quoteToken,
           storeId: selectedStore.id,
           sessionId: activeSession.id,
           items: orderPricing.items.map((item: { productId: string; variantId?: string; quantity: number; unitPrice: number; subTotal: number }) => ({
@@ -356,9 +392,26 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               card: "CARD",
             } as const
           )[paymentMethod],
-        }).unwrap();
+        };
+        let result: any;
+        try {
+          result = await createOrderApi(payload).unwrap();
+        } catch (error) {
+          const failure = error as { status?: string | number; data?: { message?: string }; error?: string };
+          const transportFailure = failure.status === "FETCH_ERROR" || failure.status === "TIMEOUT_ERROR" || (typeof failure.status === "number" && failure.status >= 500);
+          if (!transportFailure) throw error;
+          const updatedQueue = queueSale(payload);
+          setQueuedSales(updatedQueue);
+          alert("Sale saved on this device and queued for sync. Keep this register session open until it syncs.");
+          setCart([]);
+          setCheckoutOrderNumber(`POS-${crypto.randomUUID()}`);
+          setPaymentModalOpen(false);
+          setCheckoutError(null);
+          setReceivedAmount("");
+          return;
+        }
         const order = result?.order ?? result?.data?.order ?? result;
-        if (order?.id) await completeOrderApi(order.id).unwrap();
+        if (order?.id && order.status === "PENDING") await completeOrderApi(order.id).unwrap();
       } catch (e) {
         const apiError = e as { data?: { message?: string }; error?: string };
         setCheckoutError(
@@ -440,6 +493,14 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               return createSupplier(payload).unwrap();
             return createCustomer(payload).unwrap();
           }}
+          onUpdateEntity={(section, id, payload) => {
+            if (section === "products") return updateCatalogProduct({ id, patch: payload }).unwrap();
+            if (section === "staff") return updateStaff({ id, patch: payload }).unwrap();
+            if (section === "brands") return updateBrand({ id, patch: payload }).unwrap();
+            if (section === "categories") return updateCategory({ id, patch: payload }).unwrap();
+            if (section === "suppliers") return updateSupplier({ id, patch: payload }).unwrap();
+            return updateCustomer({ id, patch: payload }).unwrap();
+          }}
           onAdjustStock={(productId, variantId, quantity, reason) =>
             adjustStock({
               storeId: selectedStore!.id,
@@ -504,6 +565,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           loading={isRTKLoading || isOrdersLoading}
           lastSync={lastSync}
           onSync={syncWithServer}
+          queuedSales={queuedSales}
         />
       )}
 
@@ -539,7 +601,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       )}
 
       {activeTab === "inventory" && <InventoryView products={products} />}
-      {activeTab === "sessions" && <SessionsView sessions={apiSessions} storeId={selectedStore?.id} storeName={selectedStore?.name} onOpen={(storeId, openingBalance) => openRegisterSession({ storeId, openingBalance }).unwrap()} onClose={(sessionId, closingBalance) => closeRegisterSession({ sessionId, closingBalance }).unwrap()} />}
+      {activeTab === "sessions" && <SessionsView sessions={apiSessions} storeId={selectedStore?.id} storeName={selectedStore?.name} onOpen={(storeId, openingBalance) => openRegisterSession({ storeId, openingBalance }).unwrap()} onClose={(sessionId, closingBalance) => {
+        if (queuedSales.some((sale) => sale.payload.sessionId === sessionId)) throw new Error("This register has offline sales waiting to sync. Reconnect and sync them before closing the session.");
+        return closeRegisterSession({ sessionId, closingBalance }).unwrap();
+      }} />}
       {activeTab === "settings" && (
         <SettingsView connected={isConnected} storeName={selectedStore?.name} />
       )}

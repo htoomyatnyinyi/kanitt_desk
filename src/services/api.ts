@@ -132,8 +132,14 @@ class ApiService {
   // Create Order
   async createOrder(orderData: {
     storeId: string;
-    items: { productId: string; quantity: number; price: number }[];
-    totalAmount: number;
+    sessionId?: string;
+    orderNumber?: string;
+    items: { productId: string; variantId?: string; quantity: number }[];
+    subTotal: number;
+    taxAmount: number;
+    grandTotal: number;
+    paidAmount: number;
+    changeAmount: number;
     paymentMethod: string;
   }) {
     return this.request("/tenant/orders", {

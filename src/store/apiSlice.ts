@@ -15,6 +15,10 @@ export interface Product {
   id: string;
   name: string;
   category?: { name: string } | string;
+  categoryId?: string;
+  brandId?: string;
+  supplierId?: string;
+  costPrice?: number;
   price: number;
   sku: string;
   stock?: number;
@@ -59,6 +63,7 @@ export interface ApiOrder {
 export interface OrderInput {
   orderNumber?: string;
   promotionCode?: string;
+  pricingToken?: string;
   discountAmount?: number;
   currencyCode?: string;
   storeId: string;
@@ -100,6 +105,10 @@ export const kanittApi = createApi({
               id: p.id,
               name: p.name,
               category: typeof p.category === "object" ? p.category?.name || "General" : p.category || "General",
+              categoryId: p.categoryId,
+              brandId: p.brandId,
+              supplierId: p.supplierId,
+              costPrice: Number(p.costPrice) || 0,
               price: Number(p.price ?? p.variants?.find((v: any) => v.isActive)?.price) || 0,
               sku: p.sku || `SKU-${p.id.slice(0, 4)}`,
               stock: Number(p.totalStock ?? p.stock ?? 0),
