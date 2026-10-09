@@ -28,6 +28,31 @@ export async function removeSecureItem(key: string): Promise<void> {
   }
 }
 
+export interface AuthUser {
+  id?: string;
+  email?: string;
+  role?: string;
+  tenantId?: string;
+}
+
+export function decodeAuthToken(token?: string | null): AuthUser | null {
+  const jwtToken = token || localStorage.getItem(TOKEN_KEY);
+  if (!jwtToken) return null;
+  try {
+    const parts = jwtToken.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      tenantId: payload.tenantId,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Convenience helpers specifically for Auth Tokens
 export const setAuthToken = (token: string) => setSecureItem(TOKEN_KEY, token);
 export const getAuthToken = () => getSecureItem(TOKEN_KEY);

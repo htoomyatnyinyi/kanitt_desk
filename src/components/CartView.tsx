@@ -37,7 +37,7 @@ export function CartView({
   pricingError,
 }: CartViewProps) {
   return (
-    <div className="w-full lg:w-96 bg-slate-900 border-l border-slate-800 flex flex-col justify-between p-6 h-full">
+    <div className="w-full lg:w-80 xl:w-96 shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col justify-between p-4 lg:p-5 h-full">
       <div>
         <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
           <div className="flex items-center gap-2">

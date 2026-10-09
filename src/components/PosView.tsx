@@ -53,10 +53,10 @@ export function PosView({
   };
 
   return (
-    <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+    <div className="flex-1 min-w-0 flex flex-col p-4 lg:p-6 overflow-y-auto">
       {/* Top Bar Search & Filters */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-        <div className="relative w-full sm:w-96">
+        <div className="relative w-full sm:w-80 md:w-96">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             ref={inputRef}
@@ -78,7 +78,7 @@ export function PosView({
             <button
               key={category}
               onClick={() => setSelectedCategory(category)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+              className={`px-3.5 py-1.5 lg:px-4 lg:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
                 selectedCategory === category
                   ? "bg-slate-800 text-sky-400 border border-sky-500/40"
                   : "bg-slate-900/60 text-slate-400 border border-slate-800/60 hover:bg-slate-800"
@@ -90,8 +90,8 @@ export function PosView({
         </div>
       </div>
 
-      {/* Product Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {/* Product Cards Grid with auto-fill min width */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4">
         {filteredProducts.map((product) => (
           <div
             key={product.id}
