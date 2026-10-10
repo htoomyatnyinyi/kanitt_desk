@@ -288,9 +288,9 @@ export function ManageView(props: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadExcelTemplate = () => {
-    const headers = "Product Name,Category Name,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock\n";
-    const exampleRow1 = "Sample T-Shirt,,Red / M,,,7500,5000,50\n";
-    const exampleRow2 = "Sample T-Shirt,,Blue / L,,,8000,5000,30\n";
+    const headers = "Product Name,Category Name,Brand Name,Supplier Name,Generic Name,Active Ingredient,Strength,Dosage Form,Manufacturer,Registration Number,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock,Wholesale Price,Min Wholesale Qty,Color,Size,Mfg Date,Expiry Date,Best Before Date\n";
+    const exampleRow1 = "Sample T-Shirt,Apparel,Nike,Main Supplier,,,,,,,Red / M,TS-1001-RED-M,885000100101,7500,5000,50,7000,10,Red,M,2026-01-01,,\n";
+    const exampleRow2 = "Paracetamol 500mg,Medicine,,Pharma Supply,Paracetamol,Paracetamol,500mg,Tablet,BPI,REG-12345,Box (100s),PCM-500-BOX,885000200201,12000,9000,20,11000,5,,,2025-06-01,2028-06-01,\n";
     const blob = new Blob(["\uFEFF", headers, exampleRow1, exampleRow2], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -326,18 +326,46 @@ export function ManageView(props: Props) {
       const columns = {
         name: findColumn("productname", "name"),
         category: findColumn("categoryname", "category"),
+        brand: findColumn("brandname", "brand"),
+        supplier: findColumn("suppliername", "supplier"),
+        genericName: findColumn("genericname", "generic"),
+        activeIngredient: findColumn("activeingredient", "ingredient"),
+        strength: findColumn("strength", "dose"),
+        dosageForm: findColumn("dosageform", "form"),
+        manufacturer: findColumn("manufacturer", "maker"),
+        registrationNumber: findColumn("registrationnumber", "registrationid", "drugregistration"),
         variant: findColumn("variantname", "optionname", "variant"),
         sku: findColumn("variantsku", "optionsku", "sku"),
         barcode: findColumn("variantbarcode", "optionbarcode", "barcode"),
         price: findColumn("sellingprice", "price", "variantprice"),
         cost: findColumn("costprice", "cost"),
         stock: findColumn("initialstock", "startingstock", "stock", "quantity"),
+        wholesalePrice: findColumn("wholesaleprice", "wholesalecost"),
+        wholesaleMinQuantity: findColumn("minwholesaleqty", "wholesaleqty", "minwholesalequantity"),
+        color: findColumn("color", "colour"),
+        size: findColumn("size"),
+        manufacturingDate: findColumn("mfgdate", "manufacturingdate"),
+        expiryDate: findColumn("expirydate", "expdate"),
+        bestBeforeDate: findColumn("bestbeforedate", "bestbefore"),
       };
       if (columns.name < 0 || columns.price < 0) {
         throw new Error("Template headers are missing. Use the downloaded template with Product Name and Selling Price columns.");
       }
 
-      const products = new Map<string, { name: string; categoryName: string; variants: Record<string, unknown>[] }>();
+      const products = new Map<string, {
+        name: string;
+        categoryName: string;
+        brandName: string;
+        supplierName: string;
+        genericName: string;
+        activeIngredient: string;
+        strength: string;
+        dosageForm: string;
+        manufacturer: string;
+        registrationNumber: string;
+        variants: Record<string, unknown>[];
+      }>();
+
       for (const [index, row] of rows.slice(1).entries()) {
         const cell = (column: number) => column < 0 ? "" : String(row[column] ?? "").trim();
         const name = cell(columns.name);
@@ -349,50 +377,103 @@ export function ManageView(props: Props) {
         const price = Number(priceText);
         const costPrice = costText ? Number(costText) : 0;
         const initialStock = stockText ? Number(stockText) : 0;
+
         if (!priceText || !Number.isFinite(price) || price < 0) throw new Error(`Row ${index + 2}: Selling Price must be a valid non-negative number.`);
         if (!Number.isFinite(costPrice) || costPrice < 0) throw new Error(`Row ${index + 2}: Cost Price must be a valid non-negative number.`);
         if (!Number.isInteger(initialStock) || initialStock < 0) throw new Error(`Row ${index + 2}: Initial Stock must be a non-negative whole number.`);
 
         const categoryName = cell(columns.category);
-        const key = name.toLocaleLowerCase();
-        const product = products.get(key) ?? { name, categoryName, variants: [] };
-        if (product.categoryName && categoryName && product.categoryName.toLocaleLowerCase() !== categoryName.toLocaleLowerCase()) {
-          throw new Error(`Rows for "${name}" use different categories. Keep one category per product.`);
-        }
-        if (!product.categoryName) product.categoryName = categoryName;
-        product.variants.push({
+        const brandName = cell(columns.brand);
+        const supplierName = cell(columns.supplier);
+        const medicine = {
+          genericName: cell(columns.genericName),
+          activeIngredient: cell(columns.activeIngredient),
+          strength: cell(columns.strength),
+          dosageForm: cell(columns.dosageForm),
+          manufacturer: cell(columns.manufacturer),
+          registrationNumber: cell(columns.registrationNumber),
+        };
+
+        const wholesalePriceText = cell(columns.wholesalePrice).replace(/,/g, "");
+        const wholesaleMinQtyText = cell(columns.wholesaleMinQuantity).replace(/,/g, "");
+
+        const variantObj: Record<string, unknown> = {
           name: variantName,
           sku: cell(columns.sku) || generateVariantSku(name, variantName),
           barcode: cell(columns.barcode) || generateVariantBarcode(),
           price,
           costPrice,
           initialStock,
-        });
+          wholesalePrice: wholesalePriceText ? Number(wholesalePriceText) : undefined,
+          wholesaleMinQuantity: wholesaleMinQtyText ? Number(wholesaleMinQtyText) : undefined,
+          color: cell(columns.color) || undefined,
+          size: cell(columns.size) || undefined,
+          manufacturingDate: cell(columns.manufacturingDate) || undefined,
+          expiryDate: cell(columns.expiryDate) || undefined,
+          bestBeforeDate: cell(columns.bestBeforeDate) || undefined,
+        };
+
+        const key = name.toLocaleLowerCase();
+        const product = products.get(key) ?? {
+          name,
+          categoryName,
+          brandName,
+          supplierName,
+          ...medicine,
+          variants: [],
+        };
+
+        if (product.categoryName && categoryName && product.categoryName.toLocaleLowerCase() !== categoryName.toLocaleLowerCase()) {
+          throw new Error(`Rows for "${name}" use different categories. Keep one category per product.`);
+        }
+        if (!product.categoryName) product.categoryName = categoryName;
+        if (!product.brandName) product.brandName = brandName;
+        if (!product.supplierName) product.supplierName = supplierName;
+
+        product.variants.push(variantObj);
         products.set(key, product);
       }
 
       let successCount = 0;
       let importedOptionCount = 0;
       const failures: string[] = [];
+
       for (const product of products.values()) {
         const category = product.categoryName
           ? props.categories.find((item: any) => String(item.name).trim().toLocaleLowerCase() === product.categoryName.toLocaleLowerCase())
           : undefined;
+        const brand = product.brandName
+          ? props.brands.find((item: any) => String(item.name).trim().toLocaleLowerCase() === product.brandName.toLocaleLowerCase())
+          : undefined;
+        const supplier = product.supplierName
+          ? props.suppliers.find((item: any) => String(item.name).trim().toLocaleLowerCase() === product.supplierName.toLocaleLowerCase())
+          : undefined;
+
         if (product.categoryName && !category) {
           failures.push(`${product.name}: category "${product.categoryName}" was not found`);
           continue;
         }
+
         const primaryVariant = product.variants[0] as any;
         const initialStock = product.variants.reduce((sum, variant) => sum + Number(variant.initialStock ?? 0), 0);
+
         try {
           await props.onCreateProduct({
             name: product.name,
             sku: serial(),
             categoryId: category?.id,
+            brandId: brand?.id,
+            supplierId: supplier?.id,
             storeId: props.storeId,
             sellingPrice: primaryVariant.price,
             costPrice: primaryVariant.costPrice,
             initialStock,
+            genericName: product.genericName || undefined,
+            activeIngredient: product.activeIngredient || undefined,
+            strength: product.strength || undefined,
+            dosageForm: product.dosageForm || undefined,
+            manufacturer: product.manufacturer || undefined,
+            registrationNumber: product.registrationNumber || undefined,
             variants: product.variants,
           });
           successCount++;
@@ -402,6 +483,7 @@ export function ManageView(props: Props) {
           failures.push(`${product.name}: ${error.data?.message || error.message || "could not be imported"}`);
         }
       }
+
       setNotice(`Imported ${successCount} product${successCount === 1 ? "" : "s"} with ${importedOptionCount} sellable option${importedOptionCount === 1 ? "" : "s"}.`);
       if (failures.length) setError(`Could not import ${failures.length} product${failures.length === 1 ? "" : "s"}: ${failures.slice(0, 3).join("; ")}${failures.length > 3 ? "; see the file and try again" : ""}`);
     } catch (err: any) {

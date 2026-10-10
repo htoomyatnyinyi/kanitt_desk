@@ -386,7 +386,7 @@ export const kanittApi = createApi({
       any,
       { id: string; storeId: string; lots?: { purchaseOrderItemId: string; number: string; expiryDate?: string; manufacturingDate?: string; bestBeforeDate?: string }[] }
     >({
-      query: ({ id, storeId }) => ({
+      query: ({ id, storeId, lots }) => ({
         url: `/tenant/purchase-orders/${id}/receive`,
         method: "POST",
         body: { storeId, lots },
