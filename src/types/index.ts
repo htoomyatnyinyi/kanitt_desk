@@ -1,6 +1,12 @@
 export interface Product {
   id: string;
   name: string;
+  genericName?: string;
+  activeIngredient?: string;
+  strength?: string;
+  dosageForm?: string;
+  manufacturer?: string;
+  registrationNumber?: string;
   category: string;
   categoryId?: string;
   brandId?: string;

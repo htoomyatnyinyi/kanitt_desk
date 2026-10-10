@@ -26,7 +26,7 @@ interface Props {
   onNavigate: (tab: Destination) => void;
 }
 
-const emptyProduct: Fields = { name: "", sku: "", barcode: "", categoryId: "", brandId: "", supplierId: "", costPrice: "", sellingPrice: "", initialStock: "0" };
+const emptyProduct: Fields = { name: "", sku: "", barcode: "", categoryId: "", brandId: "", supplierId: "", costPrice: "", sellingPrice: "", initialStock: "0", genericName: "", activeIngredient: "", strength: "", dosageForm: "", manufacturer: "", registrationNumber: "" };
 const formFields: Record<EntitySection, { name: string; label: string; type?: string; required?: boolean }[]> = {
   products: [],
   staff: [{ name: "name", label: "Full name", required: true }, { name: "username", label: "Username", required: true }, { name: "email", label: "Email", type: "email", required: true }, { name: "password", label: "Temporary password", type: "password", required: true }, { name: "role", label: "Role", type: "select:ADMIN,MANAGER,CASHIER,ACCOUNTANT", required: true }],
@@ -84,7 +84,7 @@ export function ManageView(props: Props) {
   const selectedProduct = props.products.find((product) => product.id === selectedQrProduct) ?? props.products[0];
   const activeSection = section === "stock" ? "products" : section === "qr" ? "products" : section;
   const rows = listFor(activeSection, props);
-  const filteredRows = useMemo(() => rows.filter((item: any) => `${item.name ?? ""} ${item.sku ?? ""} ${item.code ?? ""} ${item.email ?? ""} ${item.phone ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())), [rows, search]);
+  const filteredRows = useMemo(() => rows.filter((item: any) => `${item.name ?? ""} ${item.sku ?? ""} ${item.code ?? ""} ${item.email ?? ""} ${item.phone ?? ""} ${item.genericName ?? ""} ${item.activeIngredient ?? ""} ${item.strength ?? ""} ${item.dosageForm ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())), [rows, search]);
 
   useEffect(() => {
     const value = selectedProduct?.barcode || selectedProduct?.sku;
@@ -156,7 +156,7 @@ export function ManageView(props: Props) {
   const openEdit = (item: any) => {
     setEditing(item);
     const values: Fields = section === "products"
-      ? { name: item.name || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? "") }
+      ? { ...emptyProduct, name: item.name || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? ""), genericName: item.genericName || "", activeIngredient: item.activeIngredient || "", strength: item.strength || "", dosageForm: item.dosageForm || "", manufacturer: item.manufacturer || "", registrationNumber: item.registrationNumber || "" }
       : Object.fromEntries(formFields[section as EntitySection].map(({ name }) => [name, name === "password" ? "" : String(item[name] ?? "")]));
     setFields(values);
     if (section === "products" && item.variants?.length) {
@@ -194,6 +194,7 @@ export function ManageView(props: Props) {
         const payload: Record<string, unknown> = {};
         if (section === "products") {
           payload.name = fields.name.trim();
+          for (const key of ["genericName", "activeIngredient", "strength", "dosageForm", "manufacturer", "registrationNumber"]) payload[key] = fields[key]?.trim() ?? "";
           for (const key of ["sku", "barcode"] as const) if (fields[key]?.trim()) payload[key] = fields[key].trim();
           if (fields.costPrice !== "") payload.costPrice = Number(fields.costPrice);
           if (fields.categoryId) payload.categoryId = fields.categoryId;
@@ -245,6 +246,12 @@ export function ManageView(props: Props) {
 
         await props.onCreateProduct({
           name: fields.name.trim(),
+          genericName: fields.genericName.trim() || undefined,
+          activeIngredient: fields.activeIngredient.trim() || undefined,
+          strength: fields.strength.trim() || undefined,
+          dosageForm: fields.dosageForm.trim() || undefined,
+          manufacturer: fields.manufacturer.trim() || undefined,
+          registrationNumber: fields.registrationNumber.trim() || undefined,
           sku: fields.sku.trim() || undefined,
           barcode: fields.barcode.trim() || undefined,
           categoryId: fields.categoryId || undefined,
@@ -288,9 +295,9 @@ export function ManageView(props: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadExcelTemplate = () => {
-    const headers = "Product Name,Category Name,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock\n";
-    const exampleRow1 = "Sample T-Shirt,,Red / M,,,7500,5000,50\n";
-    const exampleRow2 = "Sample T-Shirt,,Blue / L,,,8000,5000,30\n";
+    const headers = "Product Name,Category Name,Generic Name,Active Ingredient,Strength,Dosage Form,Manufacturer,Registration Number,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock\n";
+    const exampleRow1 = "Sample T-Shirt,,,,,,,,Red / M,,,7500,5000,50\n";
+    const exampleRow2 = "Sample T-Shirt,,,,,,,,Blue / L,,,8000,5000,30\n";
     const blob = new Blob(["\uFEFF", headers, exampleRow1, exampleRow2], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -326,6 +333,12 @@ export function ManageView(props: Props) {
       const columns = {
         name: findColumn("productname", "name"),
         category: findColumn("categoryname", "category"),
+        genericName: findColumn("genericname", "generic"),
+        activeIngredient: findColumn("activeingredient", "ingredient"),
+        strength: findColumn("strength", "dose"),
+        dosageForm: findColumn("dosageform", "form"),
+        manufacturer: findColumn("manufacturer", "maker"),
+        registrationNumber: findColumn("registrationnumber", "registrationid", "drugregistration"),
         variant: findColumn("variantname", "optionname", "variant"),
         sku: findColumn("variantsku", "optionsku", "sku"),
         barcode: findColumn("variantbarcode", "optionbarcode", "barcode"),
@@ -337,7 +350,7 @@ export function ManageView(props: Props) {
         throw new Error("Template headers are missing. Use the downloaded template with Product Name and Selling Price columns.");
       }
 
-      const products = new Map<string, { name: string; categoryName: string; variants: Record<string, unknown>[] }>();
+      const products = new Map<string, { name: string; categoryName: string; genericName: string; activeIngredient: string; strength: string; dosageForm: string; manufacturer: string; registrationNumber: string; variants: Record<string, unknown>[] }>();
       for (const [index, row] of rows.slice(1).entries()) {
         const cell = (column: number) => column < 0 ? "" : String(row[column] ?? "").trim();
         const name = cell(columns.name);
@@ -355,11 +368,16 @@ export function ManageView(props: Props) {
 
         const categoryName = cell(columns.category);
         const key = name.toLocaleLowerCase();
-        const product = products.get(key) ?? { name, categoryName, variants: [] };
+        const medicine = { genericName: cell(columns.genericName), activeIngredient: cell(columns.activeIngredient), strength: cell(columns.strength), dosageForm: cell(columns.dosageForm), manufacturer: cell(columns.manufacturer), registrationNumber: cell(columns.registrationNumber) };
+        const product = products.get(key) ?? { name, categoryName, ...medicine, variants: [] };
         if (product.categoryName && categoryName && product.categoryName.toLocaleLowerCase() !== categoryName.toLocaleLowerCase()) {
           throw new Error(`Rows for "${name}" use different categories. Keep one category per product.`);
         }
         if (!product.categoryName) product.categoryName = categoryName;
+        for (const [field, value] of Object.entries(medicine)) {
+          if (product[field as keyof typeof medicine] && value && product[field as keyof typeof medicine].toLocaleLowerCase() !== value.toLocaleLowerCase()) throw new Error(`Rows for "${name}" use different ${field} values. Keep medicine details consistent for one product.`);
+          if (!product[field as keyof typeof medicine]) product[field as keyof typeof medicine] = value;
+        }
         product.variants.push({
           name: variantName,
           sku: cell(columns.sku) || generateVariantSku(name, variantName),
@@ -387,6 +405,12 @@ export function ManageView(props: Props) {
         try {
           await props.onCreateProduct({
             name: product.name,
+            genericName: product.genericName || undefined,
+            activeIngredient: product.activeIngredient || undefined,
+            strength: product.strength || undefined,
+            dosageForm: product.dosageForm || undefined,
+            manufacturer: product.manufacturer || undefined,
+            registrationNumber: product.registrationNumber || undefined,
             sku: serial(),
             categoryId: category?.id,
             storeId: props.storeId,
@@ -505,7 +529,7 @@ export function ManageView(props: Props) {
             </div>
             {filteredRows.map((item: any) => (
               <div key={item.id} className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-800/70 px-5 py-3.5 last:border-0">
-                <span className="truncate text-sm font-semibold text-slate-100">{item.name}</span>
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-100">{item.name}</span>{section === "products" && (item.genericName || item.strength || item.dosageForm) && <span className="mt-1 block truncate text-[11px] text-emerald-300">{[item.genericName || item.activeIngredient, item.strength, item.dosageForm].filter(Boolean).join(" · ")}</span>}</span>
                 <span className="truncate font-mono text-xs text-slate-400">{section === "products" ? `${item.sku || "—"} · ${item.barcode || "—"}` : section === "staff" ? item.role : item.email || item.phone || item.contactName || "—"}</span>
                 <span className="truncate text-xs text-slate-400">{section === "products" ? `${Number(item.price).toLocaleString()} MMK · ${item.stock} in stock` : item.code || (item.isActive === false ? "Inactive" : "Active")}</span>
                 <span className="text-xs text-slate-500">{item._count?.products ?? item.storeName ?? "—"}</span>
@@ -651,6 +675,13 @@ export function ManageView(props: Props) {
                           {props.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       </label>
+                      <section className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
+                        <h4 className="text-sm font-semibold text-emerald-300">Medicine details <span className="font-normal text-slate-500">(optional)</span></h4>
+                        <p className="mt-1 text-xs text-slate-500">Add these for medicines so staff can identify the correct drug.</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          {([["genericName", "Generic name", "e.g. Paracetamol"], ["activeIngredient", "Active ingredient", "e.g. Paracetamol"], ["strength", "Strength", "e.g. 500 mg"], ["dosageForm", "Dosage form", "Tablet, capsule, syrup…"], ["manufacturer", "Manufacturer", "Company name"], ["registrationNumber", "Registration number", "Medicine registration ID"]] as const).map(([key, label, placeholder]) => <label key={key} className="block text-xs font-medium text-slate-400">{label}<input value={fields[key] ?? ""} onChange={(e) => setField(key, e.target.value)} placeholder={placeholder} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none" /></label>)}
+                        </div>
+                      </section>
                     </div>
                     {/* Tip card */}
                     <div className="flex items-start gap-3 rounded-xl border border-sky-500/15 bg-sky-500/5 px-4 py-3">

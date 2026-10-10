@@ -369,6 +369,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       selectedCategory === "All" || product.category === selectedCategory;
     const matchesSearch =
       product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.genericName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.activeIngredient?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.strength?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.dosageForm?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       product.barcode.includes(searchQuery) ||
       product.sku.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;

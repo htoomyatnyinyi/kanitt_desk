@@ -108,6 +108,7 @@ export function PosView({
               <h3 className="font-bold text-slate-100 text-sm mb-1 group-hover:text-sky-300 transition-colors line-clamp-2">
                 {product.name}
               </h3>
+              {(product.genericName || product.strength || product.dosageForm) && <p className="mb-2 line-clamp-1 text-[11px] text-emerald-300">{[product.genericName || product.activeIngredient, product.strength, product.dosageForm].filter(Boolean).join(" · ")}</p>}
               <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
                 <span>SKU: {product.sku}</span>
                 {product.barcode && (

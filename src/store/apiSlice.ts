@@ -16,6 +16,12 @@ const unwrapList = (response: any, key: string) => {
 export interface Product {
   id: string;
   name: string;
+  genericName?: string;
+  activeIngredient?: string;
+  strength?: string;
+  dosageForm?: string;
+  manufacturer?: string;
+  registrationNumber?: string;
   category?: { name: string } | string;
   categoryId?: string;
   brandId?: string;
@@ -165,6 +171,12 @@ export const kanittApi = createApi({
         return list.map((p: any) => ({
           id: p.id,
           name: p.name,
+          genericName: p.genericName || "",
+          activeIngredient: p.activeIngredient || "",
+          strength: p.strength || "",
+          dosageForm: p.dosageForm || "",
+          manufacturer: p.manufacturer || "",
+          registrationNumber: p.registrationNumber || "",
           category:
             typeof p.category === "object"
               ? p.category?.name || "General"
