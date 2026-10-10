@@ -3,13 +3,19 @@
 @layer base {
   * { box-sizing: border-box; }
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased select-none overflow-hidden;
+    @apply bg-slate-950 text-slate-100 font-sans antialiased select-none;
     margin: 0;
-    min-width: 1024px;
-    min-height: 680px;
+    min-width: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   button, input, select { font: inherit; }
   button { cursor: pointer; }
+}
+
+@supports (min-height: 100dvh) {
+  body { min-height: 100dvh; }
 }
 
 @keyframes animate-in-keyframe {

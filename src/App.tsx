@@ -493,7 +493,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+    <div className="flex h-screen h-dvh min-h-0 w-full min-w-0 bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -634,17 +634,19 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       )}
 
       {activeTab === "pos" && (
-        <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-          <PosView
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            selectedCategory={selectedCategory}
-            setSelectedCategory={setSelectedCategory}
-            categories={categories}
-            filteredProducts={filteredProducts}
-            allProducts={products}
-            addToCart={addToCart}
-          />
+        <>
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+            <PosView
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+              categories={categories}
+              filteredProducts={filteredProducts}
+              allProducts={products}
+              addToCart={addToCart}
+            />
+          </main>
           <CartView
             cart={cart}
             updateQuantity={updateQuantity}
@@ -662,7 +664,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             pricingLoading={isPricingLoading || (!!selectedStore?.id && cart.length > 0 && !orderPricing && !pricingError)}
             pricingError={pricingError}
           />
-        </main>
+        </>
       )}
 
       {activeTab === "inventory" && <InventoryView products={products} />}

@@ -53,7 +53,7 @@ export function PosView({
   };
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col p-4 lg:p-6 overflow-y-auto">
+    <div className="min-w-0 flex-none flex flex-col overflow-visible p-4 pb-24 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-6">
       {/* Top Bar Search & Filters */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
         <div className="relative w-full sm:w-80 md:w-96">

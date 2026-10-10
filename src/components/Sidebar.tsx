@@ -125,7 +125,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`flex h-screen shrink-0 flex-col border-r border-slate-800/80 bg-[#0b1220] py-3 transition-all duration-300 ${isCompact ? "w-16 px-2" : "w-16 px-2 md:w-52 lg:w-56 xl:w-64 md:px-3"}`}
+      className={`flex h-screen h-dvh shrink-0 flex-col border-r border-slate-800/80 bg-[#0b1220] py-3 transition-all duration-300 ${isCompact ? "w-16 px-2" : "w-16 px-2 md:w-52 lg:w-56 xl:w-64 md:px-3"}`}
     >
       <div className="mb-4 flex h-10 items-center justify-between px-1">
         <div className="flex items-center gap-2.5">

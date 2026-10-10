@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { BadgePercent, CreditCard, Plus, Minus, Trash2, Receipt } from "lucide-react";
 import { CartItem } from "../types";
 
@@ -36,25 +37,29 @@ export function CartView({
   pricingLoading,
   pricingError,
 }: CartViewProps) {
-  return (
-    <div className="w-full lg:w-80 xl:w-96 shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col justify-between p-4 lg:p-5 h-full">
-      <div>
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const cartPanel = (
+    <div className="flex h-full w-full flex-col justify-between bg-slate-900 p-4 lg:p-5">
+      <div className="min-h-0 flex-1">
         <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Receipt className="w-5 h-5 text-sky-400" />
             <h2 className="font-bold text-slate-100 text-lg">Current Order</h2>
           </div>
-          <button
-            onClick={() => setCart([])}
-            disabled={cart.length === 0}
-            className="text-xs text-slate-400 hover:text-rose-400 disabled:opacity-30 transition-colors"
-          >
-            Clear Cart
-          </button>
+          <div className="flex items-center gap-3">
+            {mobileCartOpen && <button type="button" onClick={() => setMobileCartOpen(false)} className="text-xs font-semibold text-slate-300 lg:hidden">Close</button>}
+            <button
+              onClick={() => setCart([])}
+              disabled={cart.length === 0}
+              className="text-xs text-slate-400 hover:text-rose-400 disabled:opacity-30 transition-colors"
+            >
+              Clear Cart
+            </button>
+          </div>
         </div>
 
         {/* Cart Item List */}
-        <div className="space-y-3 max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {cart.length === 0 ? (
             <div className="py-12 text-center text-slate-500 space-y-2">
               <ShoppingBagIcon className="w-12 h-12 mx-auto opacity-20" />
@@ -109,7 +114,7 @@ export function CartView({
       </div>
 
       {/* Checkout Calculation Footer */}
-      <div className="pt-4 border-t border-slate-800 space-y-3 bg-slate-900">
+      <div className="shrink-0 pt-4 border-t border-slate-800 space-y-3 bg-slate-900">
         <div className="space-y-1.5 text-xs">
           <div className="flex justify-between text-slate-400">
             <span>Subtotal</span>
@@ -147,6 +152,37 @@ export function CartView({
         </button>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      <aside className="hidden h-full w-80 shrink-0 border-l border-slate-800 bg-slate-900 lg:block xl:w-96">
+        {cartPanel}
+      </aside>
+      <div className="lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileCartOpen(true)}
+          className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between border-t border-slate-700 bg-slate-900 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-left shadow-[0_-10px_30px_rgba(0,0,0,0.35)]"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-300"><Receipt className="h-5 w-5" /></span>
+            <span className="min-w-0"><span className="block text-sm font-bold text-white">View cart · {cart.length} {cart.length === 1 ? "item" : "items"}</span><span className="block text-xs text-slate-400">{total.toLocaleString()} MMK</span></span>
+          </span>
+          <span className="ml-3 shrink-0 rounded-xl bg-sky-500 px-4 py-2.5 text-xs font-bold text-white">Checkout</span>
+        </button>
+        {mobileCartOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-end bg-black/70"
+            onClick={(event) => { if (event.target === event.currentTarget) setMobileCartOpen(false); }}
+          >
+            <section role="dialog" aria-modal="true" aria-label="Shopping cart" className="h-[88dvh] w-full overflow-hidden rounded-t-3xl border border-slate-700 bg-slate-900 pb-[env(safe-area-inset-bottom)] shadow-2xl">
+              {cartPanel}
+            </section>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
