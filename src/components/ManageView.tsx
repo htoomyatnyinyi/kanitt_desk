@@ -66,13 +66,54 @@ export function ManageView(props: Props) {
     return () => { disposed = true; };
   }, [selectedProduct?.id, selectedProduct?.barcode, selectedProduct?.sku]);
 
-  const openCreate = () => { setFields({ ...emptyProduct, name: "", sku: serial(), barcode: "", categoryId: props.categories[0]?.id ?? "", initialStock: "0" }); setStaffPermissions([]); setDialog("create"); setError(null); setNotice(null); };
+  const [variantInputs, setVariantInputs] = useState<{ id?: string; name: string; sku: string; price: string; costPrice?: string; barcode?: string; initialStock?: string; wholesalePrice?: string; wholesaleMinQuantity?: string; color?: string; size?: string; manufacturingDate?: string; expiryDate?: string; bestBeforeDate?: string }[]>([]);
+
+  const addVariantInput = () => {
+    setVariantInputs((prev) => [
+      ...prev,
+      { name: "", sku: "", price: "", costPrice: "", barcode: "", initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" },
+    ]);
+  };
+
+  const removeVariantInput = (index: number) => {
+    setVariantInputs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateVariantInput = (index: number, key: string, value: string) => {
+    setVariantInputs((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [key]: value };
+      return next;
+    });
+  };
+
+  const openCreate = () => { setFields({ ...emptyProduct, name: "", sku: serial(), barcode: "", categoryId: props.categories[0]?.id ?? "", initialStock: "0" }); setVariantInputs([{ name: "Each", sku: "", price: "", costPrice: "", barcode: "", initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }]); setStaffPermissions([]); setDialog("create"); setError(null); setNotice(null); };
   const openEdit = (item: any) => {
     setEditing(item);
     const values: Fields = section === "products"
       ? { name: item.name || "", sku: item.sku || "", barcode: item.barcode || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? "") }
       : Object.fromEntries(formFields[section as EntitySection].map(({ name }) => [name, name === "password" ? "" : String(item[name] ?? "")]));
-    setFields(values); setStaffPermissions(item.permissions ?? []); setDialog("edit"); setError(null); setNotice(null);
+    setFields(values);
+    if (section === "products" && item.variants?.length) {
+      setVariantInputs(
+        item.variants.map((v: any) => ({
+          id: v.id,
+          name: v.name || "",
+          sku: v.sku || "",
+          price: String(v.price ?? ""),
+          costPrice: String(v.costPrice ?? ""),
+          barcode: v.barcode || "",
+          initialStock: String(v.stock ?? 0),
+          wholesalePrice: v.wholesalePrice == null ? "" : String(v.wholesalePrice),
+          wholesaleMinQuantity: String(v.wholesaleMinQuantity ?? 1),
+          color: v.color || "", size: v.size || "",
+          manufacturingDate: v.manufacturingDate || "", expiryDate: v.expiryDate || "", bestBeforeDate: v.bestBeforeDate || "",
+        }))
+      );
+    } else {
+      setVariantInputs(section === "products" ? [{ name: "Each", sku: "", price: String(item.price ?? 0), costPrice: String(item.costPrice ?? 0), barcode: "", initialStock: String(item.stock ?? 0), wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }] : []);
+    }
+    setStaffPermissions(item.permissions ?? []); setDialog("edit"); setError(null); setNotice(null);
   };
   const openStock = (productId = "") => { if (!props.storeId) { setError("Select a store before adjusting stock."); return; } setStockFields({ productId, variantId: "", mode: "IN", quantity: "", reason: "" }); setDialog("stock"); setError(null); setNotice(null); };
   const setField = (key: string, value: string) => setFields((current) => ({ ...current, [key]: value }));
@@ -88,12 +129,28 @@ export function ManageView(props: Props) {
         if (!editing?.id) throw new Error("Select a record to edit.");
         const payload: Record<string, unknown> = {};
         if (section === "products") {
-          payload.name = fields.name.trim(); payload.sellingPrice = Number(fields.sellingPrice);
+          payload.name = fields.name.trim();
           for (const key of ["sku", "barcode"] as const) if (fields[key]?.trim()) payload[key] = fields[key].trim();
           if (fields.costPrice !== "") payload.costPrice = Number(fields.costPrice);
           if (fields.categoryId) payload.categoryId = fields.categoryId;
           if (fields.brandId) payload.brandId = fields.brandId;
           if (fields.supplierId) payload.supplierId = fields.supplierId;
+          if (variantInputs.length > 0) {
+            payload.sellingPrice = Number(variantInputs[0].price) || 0;
+            payload.costPrice = Number(variantInputs[0].costPrice) || 0;
+            payload.variants = variantInputs.map((v) => ({
+              id: v.id,
+              name: v.name.trim(),
+              sku: v.sku.trim() || undefined,
+              price: Number(v.price) || Number(fields.sellingPrice) || 0,
+              costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+              barcode: v.barcode?.trim() || undefined,
+              wholesalePrice: v.wholesalePrice ? Number(v.wholesalePrice) : undefined,
+              wholesaleMinQuantity: Math.max(1, Number(v.wholesaleMinQuantity) || 1),
+              color: v.color?.trim() || undefined, size: v.size?.trim() || undefined,
+              manufacturingDate: v.manufacturingDate || undefined, expiryDate: v.expiryDate || undefined, bestBeforeDate: v.bestBeforeDate || undefined,
+            }));
+          }
         } else {
           for (const field of formFields[section as EntitySection]) { const value = fields[field.name]?.trim(); if (value && field.name !== "password") payload[field.name] = value; }
           if (section === "staff") { payload.permissions = staffPermissions; if (fields.password?.trim()) payload.password = fields.password.trim(); if (props.storeId) payload.storeId = props.storeId; }
@@ -102,9 +159,40 @@ export function ManageView(props: Props) {
         setNotice(`${labels[section as EntitySection]} updated successfully.`);
       } else if (section === "products") {
         if (!props.storeId) throw new Error("Select a store before creating a product.");
-        const stock = Math.max(0, Math.floor(Number(fields.initialStock) || 0));
-        await props.onCreateProduct({ name: fields.name.trim(), sku: fields.sku.trim() || undefined, barcode: fields.barcode.trim() || undefined, categoryId: fields.categoryId || undefined, brandId: fields.brandId || undefined, supplierId: fields.supplierId || undefined, costPrice: Number(fields.costPrice) || 0, sellingPrice: Number(fields.sellingPrice) || 0, storeId: props.storeId, initialStock: stock });
-        setNotice("Product created and linked to the selected store.");
+        const parsedVariants = variantInputs
+          .filter((v) => v.name.trim())
+          .map((v) => ({
+            name: v.name.trim(),
+            sku: v.sku.trim() || undefined,
+            price: Number(v.price) || Number(fields.sellingPrice) || 0,
+            costPrice: v.costPrice ? Number(v.costPrice) : undefined,
+            barcode: v.barcode?.trim() || undefined,
+            initialStock: Math.max(0, Math.floor(Number(v.initialStock) || 0)),
+            wholesalePrice: v.wholesalePrice ? Number(v.wholesalePrice) : undefined,
+            wholesaleMinQuantity: Math.max(1, Number(v.wholesaleMinQuantity) || 1),
+            color: v.color?.trim() || undefined, size: v.size?.trim() || undefined,
+            manufacturingDate: v.manufacturingDate || undefined, expiryDate: v.expiryDate || undefined, bestBeforeDate: v.bestBeforeDate || undefined,
+          }));
+
+        const totalVariantStock = parsedVariants.reduce((sum, v) => sum + (v.initialStock || 0), 0);
+        if (!parsedVariants.length) throw new Error("Add at least one named sellable option.");
+        const primaryVariant = parsedVariants[0];
+        const initialStock = totalVariantStock;
+
+        await props.onCreateProduct({
+          name: fields.name.trim(),
+          sku: fields.sku.trim() || undefined,
+          barcode: fields.barcode.trim() || undefined,
+          categoryId: fields.categoryId || undefined,
+          brandId: fields.brandId || undefined,
+          supplierId: fields.supplierId || undefined,
+          costPrice: primaryVariant.costPrice || 0,
+          sellingPrice: primaryVariant.price,
+          storeId: props.storeId,
+          initialStock,
+          variants: parsedVariants.length > 0 ? parsedVariants : undefined,
+        });
+        setNotice("Product created with variants and linked to store.");
       } else {
         const payload: Record<string, unknown> = {};
         for (const field of formFields[section as EntitySection]) {
@@ -136,9 +224,9 @@ export function ManageView(props: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadExcelTemplate = () => {
-    const headers = "Product Name,SKU,Barcode,Cost Price,Selling Price,Initial Stock,Category Name\n";
-    const exampleRow1 = "Sample Product 1,SKU-1001,8850001001,5000,7500,50,General\n";
-    const exampleRow2 = "Sample Product 2,SKU-1002,8850001002,12000,16000,100,Beverages\n";
+    const headers = "Product Name,SKU,Barcode,Cost Price,Selling Price,Initial Stock,Category Name,Variant Name,Variant SKU,Variant Price\n";
+    const exampleRow1 = "Sample T-Shirt,TS-1001,8850001001,5000,7500,50,Apparel,Red / M,TS-1001-RED-M,7500\n";
+    const exampleRow2 = "Sample T-Shirt,TS-1001,8850001001,5000,7500,30,Apparel,Blue / L,TS-1001-BLU-L,8000\n";
     const blob = new Blob([headers + exampleRow1 + exampleRow2], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -171,19 +259,25 @@ export function ManageView(props: Props) {
 
       for (let i = 1; i < lines.length; i++) {
         const row = lines[i].split(",").map((col) => col.trim().replace(/^["']|["']$/g, ""));
-        if (!row[0]) continue; // Skip if no name
+        if (!row[0]) continue;
 
-        const [name, sku, barcode, costPriceStr, sellingPriceStr, initialStockStr, categoryName] = row;
+        const [name, sku, barcode, costPriceStr, sellingPriceStr, initialStockStr, categoryName, variantName, variantSku, variantPriceStr] = row;
         const sellingPrice = Number(sellingPriceStr) || 0;
         const costPrice = Number(costPriceStr) || 0;
         const initialStock = Math.max(0, Math.floor(Number(initialStockStr) || 0));
 
-        // Find or fallback categoryId
         let catId = props.categories[0]?.id;
         if (categoryName) {
           const matchedCat = props.categories.find((c: any) => c.name.toLowerCase() === categoryName.toLowerCase());
           if (matchedCat) catId = matchedCat.id;
         }
+
+        const variantObj = variantName ? [{
+          name: variantName,
+          sku: variantSku || `${sku || "SKU"}-${variantName}`,
+          price: Number(variantPriceStr) || sellingPrice,
+          initialStock,
+        }] : undefined;
 
         try {
           await props.onCreateProduct({
@@ -195,6 +289,7 @@ export function ManageView(props: Props) {
             storeId: props.storeId,
             initialStock,
             categoryId: catId,
+            variants: variantObj,
           });
           successCount++;
         } catch {
@@ -211,13 +306,281 @@ export function ManageView(props: Props) {
     }
   };
 
-  return <main className="flex-1 overflow-y-auto p-7"><header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-300">Workspace tools</p><h1 className="mt-2 text-3xl font-black text-white">Manage</h1><p className="mt-1 text-sm text-slate-400">Catalog, stock, people and customer records for {props.stores.find((store) => store.id === props.storeId)?.name ?? "your workspace"}.</p></div><span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300">{props.loading ? "Refreshing data…" : "Live server data"}</span></header>
-    <nav className="mb-5 flex flex-wrap gap-2">{sections.map(({ id, title, icon: Icon }) => <button key={id} onClick={() => { setSection(id); setSearch(""); setNotice(null); setError(null); }} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition ${section === id ? "border-sky-400/50 bg-sky-400/10 text-sky-200" : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"}`}><Icon className="h-4 w-4" />{title}</button>)}</nav>
-    {error && !dialog && <p role="alert" className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{error}</p>}{notice && !dialog && <p role="status" className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
-    {section === "stock" ? <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6"><h2 className="text-lg font-bold text-white">Adjust store stock</h2><p className="mb-5 mt-1 text-sm text-slate-400">Each adjustment is written to the server movement ledger with your reason.</p><button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-400"><Plus className="h-4 w-4" />New adjustment</button><p className="mt-4 text-xs text-slate-500">Requires an ADMIN or MANAGER account with inventory permission.</p></section> : section === "qr" ? <section className="grid gap-5 xl:grid-cols-[1fr_340px]"><div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70"><div className="flex items-center gap-3 border-b border-slate-800 p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find product by name, SKU or code" className="min-w-0 flex-1 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500" /></div><div className="max-h-[65vh] overflow-y-auto">{filteredRows.map((product: Product) => <button key={product.id} onClick={() => setSelectedQrProduct(product.id)} className={`flex w-full items-center justify-between border-b border-slate-800/70 px-4 py-3 text-left ${selectedQrProduct === product.id ? "bg-sky-500/10" : "hover:bg-slate-800/40"}`}><span><span className="block text-sm font-semibold text-slate-100">{product.name}</span><span className="mt-1 block font-mono text-xs text-slate-500">{product.barcode || product.sku}</span></span><Barcode className="h-4 w-4 text-sky-300" /></button>)}</div></div><aside className="flex flex-col items-center rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-center"><h2 className="font-bold text-white">QR label preview</h2>{selectedProduct && qrData ? <><img src={qrData} alt={`QR for ${selectedProduct.name}`} className="mt-4 h-52 w-52 rounded-xl bg-white p-2"/><p className="mt-3 text-sm font-semibold text-slate-200">{selectedProduct.name}</p><p className="mt-1 font-mono text-xs text-slate-500">{selectedProduct.barcode || selectedProduct.sku}</p><div className="mt-4 flex w-full gap-2"><button onClick={async () => { if (!selectedProduct.barcode) { const value = serial(); try { await props.onAssignBarcode(selectedProduct.id, value); setNotice(`QR/barcode ${value} assigned.`); } catch (cause) { const err = cause as { data?: { message?: string }; message?: string }; setError(err.data?.message || err.message || "Could not assign barcode."); return; } } }} className="flex-1 rounded-xl border border-slate-700 px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800">{selectedProduct.barcode ? "Code assigned" : "Assign code"}</button><button onClick={printQr} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-sky-500 px-3 py-2.5 text-xs font-bold text-white hover:bg-sky-400"><Printer className="h-3.5 w-3.5" />Print</button></div></> : <p className="mt-10 text-sm text-slate-500">Select a product with a SKU to preview its QR code.</p>}</aside></section> : <><section className="mb-4 flex flex-wrap items-center gap-3"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${section}`} className="min-w-64 flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none focus:border-sky-500" />{section === "products" && <><button onClick={downloadExcelTemplate} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors" title="Download sample CSV/Excel template"><Download className="h-4 w-4 text-emerald-400" />Template</button><input type="file" ref={fileInputRef} accept=".csv,.xlsx,.xls" onChange={handleExcelFileUpload} className="hidden" /><button onClick={() => fileInputRef.current?.click()} disabled={busy} className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50" title="Import multiple products from CSV/Excel"><FileSpreadsheet className="h-4 w-4" />Import Excel/CSV</button><button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-slate-900"><RotateCcw className="h-4 w-4" />Adjust stock</button></>}<button onClick={openCreate} className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400"><Plus className="h-4 w-4" />Add {labels[section as EntitySection]}</button></section><section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70"><div className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] gap-4 border-b border-slate-800 px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500"><span>Name</span><span>{section === "products" ? "SKU / barcode" : section === "staff" ? "Role" : "Contact"}</span><span>{section === "products" ? "Price" : "Code / status"}</span><span>Details</span></div>{filteredRows.map((item: any) => <div key={item.id} className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-800/70 px-5 py-3.5 last:border-0"><span className="truncate text-sm font-semibold text-slate-100">{item.name}</span><span className="truncate font-mono text-xs text-slate-400">{section === "products" ? `${item.sku || "—"} · ${item.barcode || "—"}` : section === "staff" ? item.role : item.email || item.phone || item.contactName || "—"}</span><span className="truncate text-xs text-slate-400">{section === "products" ? `${Number(item.price).toLocaleString()} MMK · ${item.stock} in stock` : item.code || (item.isActive === false ? "Inactive" : "Active")}</span><span className="text-xs text-slate-500">{item._count?.products ?? item.storeName ?? "—"}</span><button onClick={() => openEdit(item)} className="rounded-lg border border-slate-700 px-3 py-2 text-[10px] font-bold text-slate-300 hover:border-sky-400/40 hover:text-white">Edit</button></div>)}{!filteredRows.length && <p className="p-10 text-center text-sm text-slate-400">{props.loading ? "Loading…" : `No ${section} found.`}</p>}</section></>}
-    <section className="mt-6 flex flex-wrap gap-2 text-xs">{([ ["Inventory view", "inventory"], ["Register sessions", "sessions"], ["Workspace settings", "settings"] ] as const).map(([title, tab]) => <button key={tab} onClick={() => props.onNavigate(tab)} className="rounded-lg border border-slate-800 px-3 py-2 text-slate-400 hover:text-slate-200">{title} →</button>)}</section>
-    {dialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><form onSubmit={submit} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-xl font-bold text-white">{dialog === "stock" ? "Stock adjustment" : dialog === "edit" ? `Edit ${labels[section as EntitySection]}` : `Add ${labels[section as EntitySection]}`}</h2><p className="mt-1 text-xs text-slate-400">Saved directly to the selected tenant.</p></div><button type="button" onClick={() => setDialog(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800"><X className="h-5 w-5" /></button></div>
-      {dialog === "stock" ? <div className="space-y-4"><label className="block text-xs text-slate-400">Product<select required value={stockFields.productId} onChange={(event) => setStockFields((current) => ({ ...current, productId: event.target.value, variantId: "" }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"><option value="">Choose product</option>{props.products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.stock} in stock</option>)}</select></label>{props.products.find((product) => product.id === stockFields.productId)?.variants?.length ? <label className="block text-xs text-slate-400">Option<select value={stockFields.variantId} onChange={(event) => setStockFields((current) => ({ ...current, variantId: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"><option value="">Default active option</option>{props.products.find((product) => product.id === stockFields.productId)?.variants?.map((variant) => <option key={variant.id} value={variant.id}>{variant.name}</option>)}</select></label> : null}<div className="grid grid-cols-2 gap-3"><label className="text-xs text-slate-400">Adjustment<select value={stockFields.mode} onChange={(event) => setStockFields((current) => ({ ...current, mode: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"><option value="IN">Add stock</option><option value="OUT">Remove stock</option></select></label><label className="text-xs text-slate-400">Quantity<input type="number" min="1" step="1" required value={stockFields.quantity} onChange={(event) => setStockFields((current) => ({ ...current, quantity: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" /></label></div><label className="block text-xs text-slate-400">Reason<input required minLength={3} value={stockFields.reason} onChange={(event) => setStockFields((current) => ({ ...current, reason: event.target.value }))} placeholder="e.g. Received supplier delivery" className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" /></label></div> : section === "products" ? <div className="grid gap-3 sm:grid-cols-2">{[{ name: "name", label: "Product name", required: true }, { name: "sku", label: "SKU" }, { name: "barcode", label: "Barcode / QR value" }, { name: "costPrice", label: "Cost price", type: "number" }, { name: "sellingPrice", label: "Selling price", type: "number", required: true }, ...(dialog === "edit" ? [] : [{ name: "initialStock", label: "Initial stock", type: "number" }])].map((field) => <label key={field.name} className="text-xs text-slate-400">{field.label}<input required={dialog === "create" && field.required} type={field.type || "text"} min={field.type === "number" ? "0" : undefined} step={field.name.includes("Price") ? "0.01" : field.type === "number" ? "1" : undefined} value={fields[field.name]} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" /></label>)}<label className="text-xs text-slate-400">Category<select required value={fields.categoryId} onChange={(event) => setField("categoryId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"><option value="">Choose category</option>{props.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>{!props.categories.length && <span className="mt-1 block text-amber-300">Create a category first.</span>}</label><label className="text-xs text-slate-400">Brand (optional)<select value={fields.brandId} onChange={(event) => setField("brandId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"><option value="">No brand</option>{props.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label><label className="text-xs text-slate-400 sm:col-span-2">Supplier (optional)<select value={fields.supplierId} onChange={(event) => setField("supplierId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"><option value="">No supplier</option>{props.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label></div> : <div className="grid gap-3 sm:grid-cols-2">{formFields[section as EntitySection].map((field) => <label key={field.name} className="text-xs text-slate-400">{field.label}{field.type?.startsWith("select:") ? <select required={dialog === "create" && field.required} value={fields[field.name] || (field.type.includes("BRONZE") ? "BRONZE" : "CASHIER")} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">{field.type.split(":")[1].split(",").map((option) => <option key={option}>{option}</option>)}</select> : <input required={dialog === "create" && field.required} type={field.type || "text"} minLength={field.name === "password" && dialog === "create" ? 6 : undefined} value={fields[field.name] || ""} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />}</label>)}{section === "staff" && <fieldset className="sm:col-span-2"><legend className="mb-2 text-xs font-semibold text-slate-400">Additional permissions (server validates what you can delegate)</legend><div className="grid grid-cols-2 gap-2">{["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES", "VOID_ORDERS", "REFUND_ORDERS", "VIEW_REPORTS", "VIEW_ANALYTICS"].map((permission) => <label key={permission} className="flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs text-slate-300"><input type="checkbox" checked={staffPermissions.includes(permission)} onChange={(event) => setStaffPermissions((current) => event.target.checked ? [...current, permission] : current.filter((value) => value !== permission))} />{permission.split("_").join(" ").toLowerCase()}</label>)}</div></fieldset>}</div>}
-      {error && <p role="alert" className="mt-4 rounded-lg bg-rose-500/10 p-3 text-xs text-rose-300">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => setDialog(null)} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300">Cancel</button><button disabled={busy} className="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Saving…" : dialog === "stock" ? "Save adjustment" : dialog === "edit" ? "Save changes" : `Create ${labels[section as EntitySection]}`}</button></div></form></div>}
-  </main>;
+  return (
+    <main className="flex-1 overflow-y-auto p-7">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-300">Workspace tools</p>
+          <h1 className="mt-2 text-3xl font-black text-white">Manage</h1>
+          <p className="mt-1 text-sm text-slate-400">Catalog, stock, people and customer records for {props.stores.find((store) => store.id === props.storeId)?.name ?? "your workspace"}.</p>
+        </div>
+        <span className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300">{props.loading ? "Refreshing data…" : "Live server data"}</span>
+      </header>
+
+      <nav className="mb-5 flex flex-wrap gap-2">
+        {sections.map(({ id, title, icon: Icon }) => (
+          <button key={id} onClick={() => { setSection(id); setSearch(""); setNotice(null); setError(null); }} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition ${section === id ? "border-sky-400/50 bg-sky-400/10 text-sky-200" : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"}`}>
+            <Icon className="h-4 w-4" />{title}
+          </button>
+        ))}
+      </nav>
+
+      {error && !dialog && <p role="alert" className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{error}</p>}
+      {notice && !dialog && <p role="status" className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{notice}</p>}
+
+      {section === "stock" ? (
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <h2 className="text-lg font-bold text-white">Adjust store stock</h2>
+          <p className="mb-5 mt-1 text-sm text-slate-400">Each adjustment is written to the server movement ledger with your reason.</p>
+          <button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-400">
+            <Plus className="h-4 w-4" />New adjustment
+          </button>
+          <p className="mt-4 text-xs text-slate-500">Requires an ADMIN or MANAGER account with inventory permission.</p>
+        </section>
+      ) : section === "qr" ? (
+        <section className="grid gap-5 xl:grid-cols-[1fr_340px]">
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+            <div className="flex items-center gap-3 border-b border-slate-800 p-4">
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find product by name, SKU or code" className="min-w-0 flex-1 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500" />
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto">
+              {filteredRows.map((product: Product) => (
+                <button key={product.id} onClick={() => setSelectedQrProduct(product.id)} className={`flex w-full items-center justify-between border-b border-slate-800/70 px-4 py-3 text-left ${selectedQrProduct === product.id ? "bg-sky-500/10" : "hover:bg-slate-800/40"}`}>
+                  <span><span className="block text-sm font-semibold text-slate-100">{product.name}</span><span className="mt-1 block font-mono text-xs text-slate-500">{product.barcode || product.sku}</span></span>
+                  <Barcode className="h-4 w-4 text-sky-300" />
+                </button>
+              ))}
+            </div>
+          </div>
+          <aside className="flex flex-col items-center rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-center">
+            <h2 className="font-bold text-white">QR label preview</h2>
+            {selectedProduct && qrData ? (
+              <>
+                <img src={qrData} alt={`QR for ${selectedProduct.name}`} className="mt-4 h-52 w-52 rounded-xl bg-white p-2"/>
+                <p className="mt-3 text-sm font-semibold text-slate-200">{selectedProduct.name}</p>
+                <p className="mt-1 font-mono text-xs text-slate-500">{selectedProduct.barcode || selectedProduct.sku}</p>
+                <div className="mt-4 flex w-full gap-2">
+                  <button onClick={async () => { if (!selectedProduct.barcode) { const value = serial(); try { await props.onAssignBarcode(selectedProduct.id, value); setNotice(`QR/barcode ${value} assigned.`); } catch (cause) { const err = cause as { data?: { message?: string }; message?: string }; setError(err.data?.message || err.message || "Could not assign barcode."); return; } } }} className="flex-1 rounded-xl border border-slate-700 px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800">{selectedProduct.barcode ? "Code assigned" : "Assign code"}</button>
+                  <button onClick={printQr} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-sky-500 px-3 py-2.5 text-xs font-bold text-white hover:bg-sky-400"><Printer className="h-3.5 w-3.5" />Print</button>
+                </div>
+              </>
+            ) : <p className="mt-10 text-sm text-slate-500">Select a product with a SKU to preview its QR code.</p>}
+          </aside>
+        </section>
+      ) : (
+        <>
+          <section className="mb-4 flex flex-wrap items-center gap-3">
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${section}`} className="min-w-64 flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none focus:border-sky-500" />
+            {section === "products" && (
+              <>
+                <button onClick={downloadExcelTemplate} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors" title="Download sample CSV/Excel template">
+                  <Download className="h-4 w-4 text-emerald-400" />Template
+                </button>
+                <input type="file" ref={fileInputRef} accept=".csv,.xlsx,.xls" onChange={handleExcelFileUpload} className="hidden" />
+                <button onClick={() => fileInputRef.current?.click()} disabled={busy} className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50" title="Import multiple products from CSV/Excel">
+                  <FileSpreadsheet className="h-4 w-4" />Import Excel/CSV
+                </button>
+                <button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-slate-900">
+                  <RotateCcw className="h-4 w-4" />Adjust stock
+                </button>
+              </>
+            )}
+            <button onClick={openCreate} className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
+              <Plus className="h-4 w-4" />Add {labels[section as EntitySection]}
+            </button>
+          </section>
+
+          <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+            <div className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] gap-4 border-b border-slate-800 px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <span>Name</span>
+              <span>{section === "products" ? "SKU / barcode" : section === "staff" ? "Role" : "Contact"}</span>
+              <span>{section === "products" ? "Price" : "Code / status"}</span>
+              <span>Details</span>
+            </div>
+            {filteredRows.map((item: any) => (
+              <div key={item.id} className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-800/70 px-5 py-3.5 last:border-0">
+                <span className="truncate text-sm font-semibold text-slate-100">{item.name}</span>
+                <span className="truncate font-mono text-xs text-slate-400">{section === "products" ? `${item.sku || "—"} · ${item.barcode || "—"}` : section === "staff" ? item.role : item.email || item.phone || item.contactName || "—"}</span>
+                <span className="truncate text-xs text-slate-400">{section === "products" ? `${Number(item.price).toLocaleString()} MMK · ${item.stock} in stock` : item.code || (item.isActive === false ? "Inactive" : "Active")}</span>
+                <span className="text-xs text-slate-500">{item._count?.products ?? item.storeName ?? "—"}</span>
+                <button onClick={() => openEdit(item)} className="rounded-lg border border-slate-700 px-3 py-2 text-[10px] font-bold text-slate-300 hover:border-sky-400/40 hover:text-white">Edit</button>
+              </div>
+            ))}
+            {!filteredRows.length && <p className="p-10 text-center text-sm text-slate-400">{props.loading ? "Loading…" : `No ${section} found.`}</p>}
+          </section>
+        </>
+      )}
+
+      <section className="mt-6 flex flex-wrap gap-2 text-xs">
+        {([ ["Inventory view", "inventory"], ["Register sessions", "sessions"], ["Workspace settings", "settings"] ] as const).map(([title, tab]) => (
+          <button key={tab} onClick={() => props.onNavigate(tab)} className="rounded-lg border border-slate-800 px-3 py-2 text-slate-400 hover:text-slate-200">{title} →</button>
+        ))}
+      </section>
+
+      {dialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <form onSubmit={submit} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white">{dialog === "stock" ? "Stock adjustment" : dialog === "edit" ? `Edit ${labels[section as EntitySection]}` : `Add ${labels[section as EntitySection]}`}</h2>
+                <p className="mt-1 text-xs text-slate-400">Saved directly to the selected tenant.</p>
+              </div>
+              <button type="button" onClick={() => setDialog(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {dialog === "stock" ? (
+              <div className="space-y-4">
+                <label className="block text-xs text-slate-400">Product
+                  <select required value={stockFields.productId} onChange={(event) => setStockFields((current) => ({ ...current, productId: event.target.value, variantId: "" }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                    <option value="">Choose product</option>
+                    {props.products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.stock} in stock</option>)}
+                  </select>
+                </label>
+                {props.products.find((product) => product.id === stockFields.productId)?.variants?.length ? (
+                  <label className="block text-xs text-slate-400">Option
+                    <select value={stockFields.variantId} onChange={(event) => setStockFields((current) => ({ ...current, variantId: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                      <option value="">Default active option</option>
+                      {props.products.find((product) => product.id === stockFields.productId)?.variants?.map((variant) => <option key={variant.id} value={variant.id}>{variant.name}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-slate-400">Adjustment
+                    <select value={stockFields.mode} onChange={(event) => setStockFields((current) => ({ ...current, mode: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                      <option value="IN">Add stock</option>
+                      <option value="OUT">Remove stock</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-400">Quantity
+                    <input type="number" min="1" step="1" required value={stockFields.quantity} onChange={(event) => setStockFields((current) => ({ ...current, quantity: event.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
+                  </label>
+                </div>
+                <label className="block text-xs text-slate-400">Reason
+                  <input required minLength={3} value={stockFields.reason} onChange={(event) => setStockFields((current) => ({ ...current, reason: event.target.value }))} placeholder="e.g. Received supplier delivery" className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
+                </label>
+              </div>
+            ) : section === "products" ? (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Product details</h3>
+                  <p className="mt-1 text-xs text-slate-400">These details describe the product. Price and stock are set below for each option.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[{ name: "name", label: "Product name", required: true, type: "text" }].map((field) => (
+                    <label key={field.name} className="text-xs text-slate-400">{field.label}
+                      <input required={dialog === "create" && field.required} type={field.type || "text"} value={fields[field.name]} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
+                    </label>
+                  ))}
+                  <label className="text-xs text-slate-400">Category <span className="text-slate-600">(optional)</span>
+                    <select value={fields.categoryId} onChange={(event) => setField("categoryId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                      <option value="">No category</option>
+                      {props.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-400">Brand (optional)
+                    <select value={fields.brandId} onChange={(event) => setField("brandId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                      <option value="">No brand</option>
+                      {props.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-400 sm:col-span-2">Supplier (optional)
+                    <select value={fields.supplierId} onChange={(event) => setField("supplierId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                      <option value="">No supplier</option>
+                      {props.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <section className="border-t border-slate-800 pt-5">
+                  <div className="mb-3">
+                    <h4 className="text-sm font-bold text-white">What can customers buy?</h4>
+                    <p className="mt-1 text-xs text-slate-400">Add one option for a regular product, or more options for sizes, colors, and packs.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {variantInputs.map((v, i) => (
+                      <article key={i} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-300">{variantInputs.length === 1 ? "Sellable option" : `Option ${i + 1}`}</span>
+                          {variantInputs.length > 1 && <button type="button" aria-label={`Remove option ${i + 1}`} onClick={() => removeVariantInput(i)} className="rounded-md p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"><X className="h-4 w-4" /></button>}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="text-xs text-slate-400">Option name <span className="text-rose-300">*</span>
+                            <input required placeholder="e.g. Red / M, 500ml, Each" value={v.name} onChange={(e) => updateVariantInput(i, "name", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+                          </label>
+                          <label className="text-xs text-slate-400">Selling price (MMK) <span className="text-rose-300">*</span>
+                            <input required type="number" min="0" step="0.01" placeholder="0" value={v.price} onChange={(e) => updateVariantInput(i, "price", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+                          </label>
+                          <label className="text-xs text-slate-400">Variant SKU
+                            <input placeholder="Unique SKU (auto-generated if empty)" value={v.sku ?? ""} onChange={(e) => updateVariantInput(i, "sku", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white font-mono" />
+                          </label>
+                          <label className="text-xs text-slate-400">Variant Barcode / QR Code
+                            <input placeholder="Unique barcode for barcode scanner" value={v.barcode ?? ""} onChange={(e) => updateVariantInput(i, "barcode", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white font-mono" />
+                          </label>
+                          <label className="text-xs text-slate-400">Cost price <span className="text-slate-600">(optional)</span>
+                            <input type="number" min="0" step="0.01" placeholder="0" value={v.costPrice ?? ""} onChange={(e) => updateVariantInput(i, "costPrice", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+                          </label>
+                          {dialog === "create" && <label className="text-xs text-slate-400">Starting stock
+                            <input type="number" min="0" step="1" placeholder="0" value={v.initialStock ?? "0"} onChange={(e) => updateVariantInput(i, "initialStock", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+                          </label>}
+                        </div>
+                        <details className="mt-3 border-t border-slate-800 pt-3">
+                          <summary className="cursor-pointer select-none text-xs font-medium text-sky-300">More option details <span className="font-normal text-slate-500">(wholesale, color, size, expiry dates)</span></summary>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            {[{ key: "wholesalePrice", label: "Wholesale price", type: "number" }, { key: "wholesaleMinQuantity", label: "Wholesale minimum quantity", type: "number" }, { key: "color", label: "Color", type: "text" }, { key: "size", label: "Size", type: "text" }, { key: "manufacturingDate", label: "Manufacturing date", type: "date" }, { key: "expiryDate", label: "Expiry date", type: "date" }, { key: "bestBeforeDate", label: "Best before date", type: "date" }].map((field) => (
+                              <label key={field.key} className="text-xs text-slate-400">{field.label}
+                                <input type={field.type} min={field.type === "number" ? "0" : undefined} step={field.key.toLowerCase().includes("price") ? "0.01" : undefined} value={(v as any)[field.key] ?? ""} onChange={(e) => updateVariantInput(i, field.key, e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
+                              </label>
+                            ))}
+                          </div>
+                        </details>
+                      </article>
+                    ))}
+                  </div>
+                  <button type="button" onClick={addVariantInput} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-600 px-4 py-3 text-sm font-semibold text-sky-300 hover:border-sky-500 hover:bg-sky-500/5">
+                    <Plus className="h-4 w-4" />Add another option
+                  </button>
+                  {variantInputs.length > 1 && <p className="mt-2 text-center text-[11px] text-slate-500">Each option has its own price and stock.</p>}
+                </section>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {formFields[section as EntitySection].map((field) => (
+                  <label key={field.name} className="text-xs text-slate-400">{field.label}
+                    {field.type?.startsWith("select:") ? (
+                      <select required={dialog === "create" && field.required} value={fields[field.name] || (field.type.includes("BRONZE") ? "BRONZE" : "CASHIER")} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
+                        {field.type.split(":")[1].split(",").map((option) => <option key={option}>{option}</option>)}
+                      </select>
+                    ) : (
+                      <input required={dialog === "create" && field.required} type={field.type || "text"} minLength={field.name === "password" && dialog === "create" ? 6 : undefined} value={fields[field.name] || ""} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
+                    )}
+                  </label>
+                ))}
+                {section === "staff" && (
+                  <fieldset className="sm:col-span-2">
+                    <legend className="mb-2 text-xs font-semibold text-slate-400">Additional permissions (server validates what you can delegate)</legend>
+                    <div className="grid grid-cols-2 gap-2">
+                      {["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES", "VOID_ORDERS", "REFUND_ORDERS", "VIEW_REPORTS", "VIEW_ANALYTICS"].map((permission) => (
+                        <label key={permission} className="flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs text-slate-300">
+                          <input type="checkbox" checked={staffPermissions.includes(permission)} onChange={(event) => setStaffPermissions((current) => event.target.checked ? [...current, permission] : current.filter((value) => value !== permission))} />
+                          {permission.split("_").join(" ").toLowerCase()}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+              </div>
+            )}
+
+            {error && <p role="alert" className="mt-4 rounded-lg bg-rose-500/10 p-3 text-xs text-rose-300">{error}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setDialog(null)} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300">Cancel</button>
+              <button disabled={busy} className="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Saving…" : dialog === "stock" ? "Save adjustment" : dialog === "edit" ? "Save changes" : `Create ${labels[section as EntitySection]}`}</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </main>
+  );
 }
