@@ -282,6 +282,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       setOrderPricing(null);
       setPricingError(null);
       void quoteOrder({
+        storeId: selectedStore.id,
         items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
         ...(promotionCode ? { promotionCode } : {}),
       }).unwrap().then((result) => {
@@ -384,7 +385,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const total = orderPricing?.grandTotal ?? subtotal;
   const changeAmount = Math.max(0, (Number(receivedAmount) || 0) - total);
 
-  const handleCheckoutSuccess = async () => {
+  const handleCheckoutSuccess = async (payments?: { method: string; amount: number }[]) => {
     if (!orderPricing || pricingError) {
       setCheckoutError(pricingError || "Wait for the server to calculate this sale before taking payment.");
       return;
@@ -401,6 +402,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         const payload = {
           orderNumber: checkoutOrderNumber,
           pricingToken: orderPricing.quoteToken,
+          quotedPricing: (({ quoteToken: _quoteToken, ...quote }: any) => quote)(orderPricing),
           storeId: selectedStore.id,
           sessionId: activeSession.id,
           items: orderPricing.items.map((item: { productId: string; variantId?: string; quantity: number; unitPrice: number; subTotal: number }) => ({
@@ -416,9 +418,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           taxAmount: tax,
           grandTotal: total,
           currencyCode: "MMK",
-          paidAmount: paymentMethod === "cash" ? Number(receivedAmount) : total,
-          changeAmount: changeAmount,
-          paymentMethod: (
+          paidAmount: payments?.length ? total : paymentMethod === "cash" ? Number(receivedAmount) : total,
+          changeAmount: payments?.length ? 0 : changeAmount,
+          paymentMethod: payments && payments.length > 1 ? "MIXED_PAYMENT" : (
             {
               cash: "CASH",
               kpay: "KBZ_PAY",
@@ -426,6 +428,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               card: "CARD",
             } as const
           )[paymentMethod],
+          payments,
         };
         let result: any;
         try {
@@ -477,9 +480,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       taxAmount: tax,
       discountAmount: discount,
       grandTotal: total,
-      paymentMethod,
-      receivedAmount: Number(receivedAmount) || total,
-      changeAmount,
+      paymentMethod: payments && payments.length > 1 ? "MIXED_PAYMENT" : paymentMethod,
+      receivedAmount: payments?.length ? total : Number(receivedAmount) || total,
+      changeAmount: payments?.length ? 0 : changeAmount,
     };
     setCurrentReceipt(completedReceiptData);
     setCart([]);
@@ -594,8 +597,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           onUpdatePurchaseOrder={(id, patch) =>
             updatePurchaseOrder({ id, patch }).unwrap()
           }
-          onReceivePurchaseOrder={(id, storeId) =>
-            receivePurchaseOrder({ id, storeId }).unwrap()
+          onReceivePurchaseOrder={(id, storeId, lots) =>
+            receivePurchaseOrder({ id, storeId, lots }).unwrap()
           }
           onCreateExpense={(payload) => createExpense(payload).unwrap()}
           onCreateExpenseCategory={(name) =>

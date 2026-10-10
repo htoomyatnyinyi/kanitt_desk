@@ -24,6 +24,7 @@ export interface Product {
   price: number;
   sku: string;
   stock?: number;
+  inventories?: { quantity: number; lot?: { number: string; expiryDate?: string | null; manufacturingDate?: string | null } | null }[];
   barcode?: string;
   imageUrl?: string;
   variants?: {
@@ -85,6 +86,7 @@ export interface OrderInput {
   orderNumber?: string;
   promotionCode?: string;
   pricingToken?: string;
+  quotedPricing?: Record<string, unknown>;
   discountAmount?: number;
   currencyCode?: string;
   storeId: string;
@@ -102,6 +104,7 @@ export interface OrderInput {
   paidAmount: number;
   changeAmount: number;
   paymentMethod: string;
+  payments?: { method: string; amount: number; referenceNumber?: string }[];
 }
 
 export const kanittApi = createApi({
@@ -179,6 +182,10 @@ export const kanittApi = createApi({
             ) || 0,
           sku: p.sku || `SKU-${p.id.slice(0, 4)}`,
           stock: Number(p.totalStock ?? p.stock ?? 0),
+          inventories: Array.isArray(p.inventories) ? p.inventories.map((inventory: any) => ({
+            quantity: Number(inventory.quantity) || 0,
+            lot: inventory.lot ? { number: inventory.lot.number, expiryDate: inventory.lot.expiryDate, manufacturingDate: inventory.lot.manufacturingDate } : null,
+          })) : [],
           barcode: p.barcode || "",
           variants: Array.isArray(p.variants)
             ? p.variants.map((v: any) => ({
@@ -377,12 +384,12 @@ export const kanittApi = createApi({
     }),
     receivePurchaseOrder: builder.mutation<
       any,
-      { id: string; storeId: string }
+      { id: string; storeId: string; lots?: { purchaseOrderItemId: string; number: string; expiryDate?: string; manufacturingDate?: string; bestBeforeDate?: string }[] }
     >({
       query: ({ id, storeId }) => ({
         url: `/tenant/purchase-orders/${id}/receive`,
         method: "POST",
-        body: { storeId },
+        body: { storeId, lots },
       }),
       invalidatesTags: ["PurchaseOrders", "Products", "Inventory"],
     }),
@@ -677,6 +684,7 @@ export const kanittApi = createApi({
     quoteOrder: builder.mutation<
       any,
       {
+        storeId?: string;
         items: { productId: string; variantId?: string; quantity: number }[];
         promotionCode?: string;
       }

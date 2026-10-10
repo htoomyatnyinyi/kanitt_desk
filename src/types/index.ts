@@ -10,6 +10,7 @@ export interface Product {
   sku: string;
   stock: number;
   barcode: string;
+  inventories?: { quantity: number; lot?: { number: string; expiryDate?: string | null; manufacturingDate?: string | null } | null }[];
   image?: string;
   variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number }[];
 }

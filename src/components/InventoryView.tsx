@@ -68,7 +68,12 @@ export function InventoryView({ products }: InventoryViewProps) {
                   {product.price.toLocaleString()}{" "}
                   <span className="text-slate-500 font-normal text-xs">MMK</span>
                 </td>
-                <td className="px-5 py-3 text-right font-bold text-white">{product.stock}</td>
+                <td className="px-5 py-3 text-right font-bold text-white">
+                  {product.stock}
+                  {product.inventories?.some((inventory) => inventory.lot) && <div className="mt-1 space-y-1 text-[10px] font-medium text-slate-400">
+                    {product.inventories.filter((inventory) => inventory.lot).map((inventory, index) => <div key={`${inventory.lot?.number}-${index}`}>Lot {inventory.lot?.number} · {inventory.quantity} {inventory.lot?.expiryDate ? `· Exp ${new Date(inventory.lot.expiryDate).toLocaleDateString()}` : ""}</div>)}
+                  </div>}
+                </td>
                 <td className="px-5 py-3 text-center">
                   <span
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
