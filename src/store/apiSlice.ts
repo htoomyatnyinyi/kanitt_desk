@@ -161,7 +161,7 @@ export const kanittApi = createApi({
     getProducts: builder.query<Product[], { storeId?: string }>({
       query: ({ storeId }) => ({
         url: "/tenant/products",
-        params: { limit: 100, ...(storeId ? { storeId } : {}) },
+        params: { limit: 10000, ...(storeId ? { storeId } : {}) },
       }),
       transformResponse: (response: any) => {
         const list = unwrapList(response, "products");
@@ -227,7 +227,7 @@ export const kanittApi = createApi({
     }),
 
     getCategories: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/categories", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/categories", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "categories"),
       providesTags: ["Categories"],
     }),
@@ -250,7 +250,7 @@ export const kanittApi = createApi({
       invalidatesTags: ["Categories", "Products"],
     }),
     getBrands: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/brands", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/brands", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "brands"),
       providesTags: ["Brands"],
     }),
@@ -270,7 +270,7 @@ export const kanittApi = createApi({
       invalidatesTags: ["Brands"],
     }),
     getSuppliers: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/suppliers", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/suppliers", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "suppliers"),
       providesTags: ["Suppliers"],
     }),
@@ -290,7 +290,7 @@ export const kanittApi = createApi({
       invalidatesTags: ["Suppliers"],
     }),
     getCustomers: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/customers", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/customers", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "customers"),
       providesTags: ["Customers"],
     }),
@@ -312,7 +312,7 @@ export const kanittApi = createApi({
     getStaff: builder.query<any[], { storeId?: string }>({
       query: ({ storeId }) => ({
         url: "/tenant/staff",
-        params: { limit: 100, ...(storeId ? { storeId } : {}) },
+        params: { limit: 10000, ...(storeId ? { storeId } : {}) },
       }),
       transformResponse: (r: any) => unwrapList(r, "staff"),
       providesTags: ["Staff"],
@@ -359,7 +359,7 @@ export const kanittApi = createApi({
       invalidatesTags: ["Products", "Inventory"],
     }),
     getPurchaseOrders: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/purchase-orders", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/purchase-orders", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "purchaseOrders"),
       providesTags: ["PurchaseOrders"],
     }),
@@ -421,7 +421,7 @@ export const kanittApi = createApi({
     getSupplierPayments: builder.query<any[], void>({
       query: () => ({
         url: "/tenant/supplier-payments",
-        params: { limit: 100 },
+        params: { limit: 10000 },
       }),
       transformResponse: (r: any) => unwrapList(r, "payments"),
       providesTags: ["SupplierPayments"],
@@ -435,7 +435,7 @@ export const kanittApi = createApi({
       invalidatesTags: ["SupplierPayments", "Suppliers"],
     }),
     getStockTransfers: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/stock-transfers", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/stock-transfers", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "stockTransfers"),
       providesTags: ["StockTransfers"],
     }),
@@ -455,7 +455,7 @@ export const kanittApi = createApi({
       invalidatesTags: ["StockTransfers", "Products", "Inventory"],
     }),
     getReturns: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/returns", params: { limit: 100 } }),
+      query: () => ({ url: "/tenant/returns", params: { limit: 10000 } }),
       transformResponse: (r: any) => unwrapList(r, "returns"),
       providesTags: ["Returns"],
     }),
@@ -496,7 +496,7 @@ export const kanittApi = createApi({
     getPromotions: builder.query<any[], void>({
       query: () => ({
         url: "/tenant/promotions",
-        params: { page: 1, limit: 100 },
+        params: { page: 1, limit: 10000 },
       }),
       transformResponse: (r: any) => unwrapList(r, "promotions"),
       providesTags: ["Promotions"],
@@ -539,7 +539,7 @@ export const kanittApi = createApi({
     getCashRegisters: builder.query<any[], { storeId?: string }>({
       query: ({ storeId }) => ({
         url: "/tenant/cash-registers",
-        params: { page: 1, limit: 100, ...(storeId ? { storeId } : {}) },
+        params: { page: 1, limit: 10000, ...(storeId ? { storeId } : {}) },
       }),
       transformResponse: (r: any) => unwrapList(r, "cashRegisters"),
       providesTags: ["CashRegisters"],
@@ -558,7 +558,7 @@ export const kanittApi = createApi({
     getGiftCards: builder.query<any[], void>({
       query: () => ({
         url: "/tenant/gift-cards",
-        params: { page: 1, limit: 100 },
+        params: { page: 1, limit: 10000 },
       }),
       transformResponse: (r: any) => unwrapList(r, "giftCards"),
       providesTags: ["GiftCards"],
@@ -588,7 +588,7 @@ export const kanittApi = createApi({
     getWallets: builder.query<any[], void>({
       query: () => ({
         url: "/tenant/wallets",
-        params: { page: 1, limit: 100 },
+        params: { page: 1, limit: 10000 },
       }),
       transformResponse: (r: any) => unwrapList(r, "wallets"),
       providesTags: ["Wallets"],
@@ -625,7 +625,7 @@ export const kanittApi = createApi({
     getSessions: builder.query<Session[], { storeId?: string }>({
       query: ({ storeId }) => ({
         url: "/tenant/sessions",
-        params: { limit: 100, ...(storeId ? { storeId } : {}) },
+        params: { limit: 10000, ...(storeId ? { storeId } : {}) },
       }),
       transformResponse: (res: any) =>
         unwrapList(res, "sessions").map((s: any) => ({
@@ -638,7 +638,7 @@ export const kanittApi = createApi({
     getOrders: builder.query<ApiOrder[], { storeId?: string }>({
       query: ({ storeId }) => ({
         url: "/tenant/orders",
-        params: { limit: 100, ...(storeId ? { storeId } : {}) },
+        params: { limit: 10000, ...(storeId ? { storeId } : {}) },
       }),
       transformResponse: (response: any) =>
         unwrapList(response, "orders").map((order: any) => ({

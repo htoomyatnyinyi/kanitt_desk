@@ -81,10 +81,25 @@ export function ManageView(props: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const selectedProduct = props.products.find((product) => product.id === selectedQrProduct) ?? props.products[0];
   const activeSection = section === "stock" ? "products" : section === "qr" ? "products" : section;
   const rows = listFor(activeSection, props);
   const filteredRows = useMemo(() => rows.filter((item: any) => `${item.name ?? ""} ${item.sku ?? ""} ${item.code ?? ""} ${item.email ?? ""} ${item.phone ?? ""}`.toLowerCase().includes(search.trim().toLowerCase())), [rows, search]);
+
+  const totalItems = filteredRows.length;
+  const totalPages = pageSize > 0 ? Math.ceil(totalItems / pageSize) || 1 : 1;
+  const activePage = Math.min(currentPage, totalPages);
+
+  const paginatedRows = useMemo(() => {
+    if (pageSize <= 0) return filteredRows;
+    const start = (activePage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, activePage, pageSize]);
+
+  const startItem = totalItems === 0 ? 0 : (activePage - 1) * pageSize + 1;
+  const endItem = pageSize <= 0 ? totalItems : Math.min(activePage * pageSize, totalItems);
 
   useEffect(() => {
     const value = selectedProduct?.barcode || selectedProduct?.sku;
@@ -557,25 +572,48 @@ export function ManageView(props: Props) {
         </section>
       ) : (
         <>
-          <section className="mb-4 flex flex-wrap items-center gap-3">
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${section}`} className="min-w-64 flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none focus:border-sky-500" />
-            {section === "products" && (
-              <>
-                <button onClick={downloadExcelTemplate} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors" title="Download UTF-8 CSV product template">
-                  <Download className="h-4 w-4 text-emerald-400" />Template
-                </button>
-                <input type="file" ref={fileInputRef} accept=".csv,text/csv" onChange={handleExcelFileUpload} className="hidden" />
-                <button onClick={() => fileInputRef.current?.click()} disabled={busy} className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50" title="Import products from a CSV file">
-                  <FileSpreadsheet className="h-4 w-4" />Import CSV
-                </button>
-                <button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-slate-900">
-                  <RotateCcw className="h-4 w-4" />Adjust stock
-                </button>
-              </>
-            )}
-            <button onClick={openCreate} className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
-              <Plus className="h-4 w-4" />Add {labels[section as EntitySection]}
-            </button>
+          <section className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-1 items-center gap-3 min-w-[280px]">
+              <input value={search} onChange={(event) => { setSearch(event.target.value); setCurrentPage(1); }} placeholder={`Search ${section}...`} className="min-w-64 flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none focus:border-sky-500" />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-xs text-slate-400 flex items-center gap-2">
+                Per page:
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-2 focus:outline-none focus:border-sky-500"
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                  <option value={500}>500</option>
+                  <option value={0}>All ({totalItems})</option>
+                </select>
+              </label>
+
+              {section === "products" && (
+                <>
+                  <button onClick={downloadExcelTemplate} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors" title="Download UTF-8 CSV product template">
+                    <Download className="h-4 w-4 text-emerald-400" />Template
+                  </button>
+                  <input type="file" ref={fileInputRef} accept=".csv,text/csv" onChange={handleExcelFileUpload} className="hidden" />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={busy} className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50" title="Import products from a CSV file">
+                    <FileSpreadsheet className="h-4 w-4" />Import CSV
+                  </button>
+                  <button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-slate-900">
+                    <RotateCcw className="h-4 w-4" />Adjust stock
+                  </button>
+                </>
+              )}
+              <button onClick={openCreate} className="flex items-center gap-2 rounded-xl bg-sky-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-sky-400">
+                <Plus className="h-4 w-4" />Add {labels[section as EntitySection]}
+              </button>
+            </div>
           </section>
 
           <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
@@ -585,7 +623,7 @@ export function ManageView(props: Props) {
               <span>{section === "products" ? "Price" : "Code / status"}</span>
               <span>Details</span>
             </div>
-            {filteredRows.map((item: any) => (
+            {paginatedRows.map((item: any) => (
               <div key={item.id} className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-800/70 px-5 py-3.5 last:border-0">
                 <span className="truncate text-sm font-semibold text-slate-100">{item.name}</span>
                 <span className="truncate font-mono text-xs text-slate-400">{section === "products" ? `${item.sku || "—"} · ${item.barcode || "—"}` : section === "staff" ? item.role : item.email || item.phone || item.contactName || "—"}</span>
@@ -596,6 +634,38 @@ export function ManageView(props: Props) {
             ))}
             {!filteredRows.length && <p className="p-10 text-center text-sm text-slate-400">{props.loading ? "Loading…" : `No ${section} found.`}</p>}
           </section>
+
+          {totalItems > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 px-2">
+              <p className="text-xs text-slate-400">
+                Showing <strong className="text-white">{startItem.toLocaleString()}</strong> to{" "}
+                <strong className="text-white">{endItem.toLocaleString()}</strong> of{" "}
+                <strong className="text-white">{totalItems.toLocaleString()}</strong> {section}
+              </p>
+
+              {pageSize > 0 && totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={activePage <= 1}
+                    className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 disabled:opacity-40 transition-colors"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                  </button>
+                  <span className="text-xs text-slate-400 px-2">
+                    Page <strong className="text-white">{activePage}</strong> of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={activePage >= totalPages}
+                    className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 disabled:opacity-40 transition-colors"
+                  >
+                    Next <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

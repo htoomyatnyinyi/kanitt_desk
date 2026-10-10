@@ -24,11 +24,31 @@ export function PosView({
   addToCart,
 }: PosViewProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Auto-focus search / barcode input on component mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Reset pagination on search query or category change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory]);
+
+  const totalItems = filteredProducts.length;
+  const totalPages = pageSize > 0 ? Math.ceil(totalItems / pageSize) || 1 : 1;
+  const activePage = Math.min(currentPage, totalPages);
+
+  const paginatedProducts = useMemo(() => {
+    if (pageSize <= 0) return filteredProducts;
+    const start = (activePage - 1) * pageSize;
+    return filteredProducts.slice(start, start + pageSize);
+  }, [filteredProducts, activePage, pageSize]);
+
+  const startItem = totalItems === 0 ? 0 : (activePage - 1) * pageSize + 1;
+  const endItem = pageSize <= 0 ? totalItems : Math.min(activePage * pageSize, totalItems);
 
   // Handle Enter key on barcode scanner input for instant add-to-cart
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -55,7 +75,7 @@ export function PosView({
   return (
     <div className="min-w-0 flex-none flex flex-col overflow-visible p-4 pb-24 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-6">
       {/* Top Bar Search & Filters */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
         <div className="relative w-full sm:w-80 md:w-96">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -72,27 +92,46 @@ export function PosView({
           </div>
         </div>
 
-        {/* Category Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => setSelectedCategory(category)}
-              className={`px-3.5 py-1.5 lg:px-4 lg:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                selectedCategory === category
-                  ? "bg-slate-800 text-sky-400 border border-sky-500/40"
-                  : "bg-slate-900/60 text-slate-400 border border-slate-800/60 hover:bg-slate-800"
-              }`}
+        {/* Category Pills & Per Page selector */}
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+            {categories.map((category) => (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`px-3.5 py-1.5 lg:px-4 lg:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedCategory === category
+                    ? "bg-slate-800 text-sky-400 border border-sky-500/40"
+                    : "bg-slate-900/60 text-slate-400 border border-slate-800/60 hover:bg-slate-800"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+
+          <label className="text-xs text-slate-400 flex items-center gap-1.5 ml-auto">
+            Grid:
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-sky-500"
             >
-              {category}
-            </button>
-          ))}
+              <option value={100}>100</option>
+              <option value={250}>250</option>
+              <option value={500}>500</option>
+              <option value={0}>All ({totalItems})</option>
+            </select>
+          </label>
         </div>
       </div>
 
-      {/* Product Cards Grid with auto-fill min width */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4">
-        {filteredProducts.map((product) => (
+      {/* Product Cards Grid */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4 flex-1">
+        {paginatedProducts.map((product) => (
           <div
             key={product.id}
             onClick={() => addToCart(product)}
@@ -128,6 +167,45 @@ export function PosView({
           </div>
         ))}
       </div>
+
+      {paginatedProducts.length === 0 && (
+        <div className="py-16 text-center text-sm text-slate-400">
+          No matching products found.
+        </div>
+      )}
+
+      {/* POS Pagination Footer */}
+      {totalItems > 0 && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-slate-800/60 text-xs">
+          <p className="text-slate-400">
+            Showing <strong className="text-white">{startItem.toLocaleString()}</strong>–
+            <strong className="text-white">{endItem.toLocaleString()}</strong> of{" "}
+            <strong className="text-white">{totalItems.toLocaleString()}</strong> items
+          </p>
+
+          {pageSize > 0 && totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={activePage <= 1}
+                className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 disabled:opacity-40 transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="text-slate-400">
+                Page <strong className="text-white">{activePage}</strong> / {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={activePage >= totalPages}
+                className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 disabled:opacity-40 transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
