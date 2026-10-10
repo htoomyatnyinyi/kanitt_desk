@@ -368,10 +368,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const filteredProducts = products.filter((product) => {
     const matchesCategory =
       selectedCategory === "All" || product.category === selectedCategory;
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.barcode.includes(searchQuery) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      (product.name || "").toLowerCase().includes(q) ||
+      (product.barcode || "").toLowerCase().includes(q) ||
+      (product.sku || "").toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 

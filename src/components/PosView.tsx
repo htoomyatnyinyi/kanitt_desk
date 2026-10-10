@@ -60,9 +60,9 @@ export function PosView({
       // Match exact barcode first, then fallback to exact SKU or name match
       const matched = productList.find(
         (p) =>
-          p.barcode?.toLowerCase() === query ||
-          p.sku?.toLowerCase() === query ||
-          p.name.toLowerCase() === query
+          (p.barcode || "").toLowerCase() === query ||
+          (p.sku || "").toLowerCase() === query ||
+          (p.name || "").toLowerCase() === query
       );
 
       if (matched) {
