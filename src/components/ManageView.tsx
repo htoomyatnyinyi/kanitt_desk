@@ -40,6 +40,33 @@ const listFor = (section: EntitySection, props: Props): any[] => ({ products: pr
 const labels: Record<EntitySection, string> = { products: "Product", staff: "Staff member", brands: "Brand", categories: "Category", suppliers: "Supplier", customers: "Customer" };
 const serial = () => `KNT-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let value = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (quoted && text[i + 1] === '"') { value += '"'; i++; }
+      else quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(value.trim()); value = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && text[i + 1] === "\n") i++;
+      row.push(value.trim()); value = "";
+      if (row.some((cell) => cell !== "")) rows.push(row);
+      row = [];
+    } else value += char;
+  }
+  if (quoted) throw new Error("The CSV has an unclosed quotation mark.");
+  row.push(value.trim());
+  if (row.some((cell) => cell !== "")) rows.push(row);
+  return rows;
+}
+
+const csvHeaderKey = (value: string) => value.replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+
 export function ManageView(props: Props) {
   const [section, setSection] = useState<Section>("products");
   const [dialog, setDialog] = useState<"create" | "edit" | "stock" | null>(null);
@@ -262,9 +289,9 @@ export function ManageView(props: Props) {
 
   const downloadExcelTemplate = () => {
     const headers = "Product Name,Category Name,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock\n";
-    const exampleRow1 = "Sample T-Shirt,Apparel,Red / M,TS-1001-RED-M,885000100101,7500,5000,50\n";
-    const exampleRow2 = "Sample T-Shirt,Apparel,Blue / L,TS-1001-BLU-L,885000100102,8000,5000,30\n";
-    const blob = new Blob([headers + exampleRow1 + exampleRow2], { type: "text/csv;charset=utf-8;" });
+    const exampleRow1 = "Sample T-Shirt,,Red / M,,,7500,5000,50\n";
+    const exampleRow2 = "Sample T-Shirt,,Blue / L,,,8000,5000,30\n";
+    const blob = new Blob(["\uFEFF", headers, exampleRow1, exampleRow2], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -277,6 +304,11 @@ export function ManageView(props: Props) {
   const handleExcelFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setError("This importer accepts CSV files only. Save the Excel file as CSV UTF-8, then import that CSV.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     if (!props.storeId) {
       setError("Please select an active store before importing products.");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -284,59 +316,94 @@ export function ManageView(props: Props) {
     }
     setBusy(true);
     setError(null);
-    setNotice("Reading and importing products file...");
+    setNotice("Reading product template...");
 
     try {
-      const text = await file.text();
-      const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
-      if (lines.length < 2) throw new Error("File is empty or missing data rows.");
-
-      let successCount = 0;
-      let failCount = 0;
-
-      for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].split(",").map((col) => col.trim().replace(/^["']|["']$/g, ""));
-        if (!row[0]) continue;
-
-        const [name, categoryName, variantName, variantSku, variantBarcode, sellingPriceStr, costPriceStr, initialStockStr] = row;
-        const sellingPrice = Number(sellingPriceStr) || 0;
-        const costPrice = Number(costPriceStr) || 0;
-        const initialStock = Math.max(0, Math.floor(Number(initialStockStr) || 0));
-
-        let catId = props.categories[0]?.id;
-        if (categoryName) {
-          const matchedCat = props.categories.find((c: any) => c.name.toLowerCase() === categoryName.toLowerCase());
-          if (matchedCat) catId = matchedCat.id;
-        }
-
-        const vName = variantName || "Each";
-        const vSku = variantSku || `SKU-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-        const vBarcode = variantBarcode || `${Math.floor(100000000000 + Math.random() * 900000000000)}`;
-
-        const variantObj = [{
-          name: vName,
-          sku: vSku,
-          barcode: vBarcode,
-          price: sellingPrice,
-          costPrice,
-          initialStock,
-        }];
-
-        try {
-          await props.onCreateProduct({
-            name,
-            storeId: props.storeId,
-            initialStock,
-            categoryId: catId,
-            variants: variantObj,
-          });
-          successCount++;
-        } catch {
-          failCount++;
-        }
+      const rows = parseCsv(await file.text());
+      if (rows.length < 2) throw new Error("The CSV is empty or has no product rows.");
+      const headers = rows[0].map(csvHeaderKey);
+      const findColumn = (...names: string[]) => headers.findIndex((header) => names.includes(header));
+      const columns = {
+        name: findColumn("productname", "name"),
+        category: findColumn("categoryname", "category"),
+        variant: findColumn("variantname", "optionname", "variant"),
+        sku: findColumn("variantsku", "optionsku", "sku"),
+        barcode: findColumn("variantbarcode", "optionbarcode", "barcode"),
+        price: findColumn("sellingprice", "price", "variantprice"),
+        cost: findColumn("costprice", "cost"),
+        stock: findColumn("initialstock", "startingstock", "stock", "quantity"),
+      };
+      if (columns.name < 0 || columns.price < 0) {
+        throw new Error("Template headers are missing. Use the downloaded template with Product Name and Selling Price columns.");
       }
 
-      setNotice(`Batch import complete: ${successCount} products added successfully.${failCount > 0 ? ` (${failCount} skipped/failed)` : ""}`);
+      const products = new Map<string, { name: string; categoryName: string; variants: Record<string, unknown>[] }>();
+      for (const [index, row] of rows.slice(1).entries()) {
+        const cell = (column: number) => column < 0 ? "" : String(row[column] ?? "").trim();
+        const name = cell(columns.name);
+        if (!name) throw new Error(`Row ${index + 2}: Product Name is required.`);
+        const variantName = cell(columns.variant) || "Each";
+        const priceText = cell(columns.price).replace(/,/g, "");
+        const costText = cell(columns.cost).replace(/,/g, "");
+        const stockText = cell(columns.stock).replace(/,/g, "");
+        const price = Number(priceText);
+        const costPrice = costText ? Number(costText) : 0;
+        const initialStock = stockText ? Number(stockText) : 0;
+        if (!priceText || !Number.isFinite(price) || price < 0) throw new Error(`Row ${index + 2}: Selling Price must be a valid non-negative number.`);
+        if (!Number.isFinite(costPrice) || costPrice < 0) throw new Error(`Row ${index + 2}: Cost Price must be a valid non-negative number.`);
+        if (!Number.isInteger(initialStock) || initialStock < 0) throw new Error(`Row ${index + 2}: Initial Stock must be a non-negative whole number.`);
+
+        const categoryName = cell(columns.category);
+        const key = name.toLocaleLowerCase();
+        const product = products.get(key) ?? { name, categoryName, variants: [] };
+        if (product.categoryName && categoryName && product.categoryName.toLocaleLowerCase() !== categoryName.toLocaleLowerCase()) {
+          throw new Error(`Rows for "${name}" use different categories. Keep one category per product.`);
+        }
+        if (!product.categoryName) product.categoryName = categoryName;
+        product.variants.push({
+          name: variantName,
+          sku: cell(columns.sku) || generateVariantSku(name, variantName),
+          barcode: cell(columns.barcode) || generateVariantBarcode(),
+          price,
+          costPrice,
+          initialStock,
+        });
+        products.set(key, product);
+      }
+
+      let successCount = 0;
+      let importedOptionCount = 0;
+      const failures: string[] = [];
+      for (const product of products.values()) {
+        const category = product.categoryName
+          ? props.categories.find((item: any) => String(item.name).trim().toLocaleLowerCase() === product.categoryName.toLocaleLowerCase())
+          : undefined;
+        if (product.categoryName && !category) {
+          failures.push(`${product.name}: category "${product.categoryName}" was not found`);
+          continue;
+        }
+        const primaryVariant = product.variants[0] as any;
+        const initialStock = product.variants.reduce((sum, variant) => sum + Number(variant.initialStock ?? 0), 0);
+        try {
+          await props.onCreateProduct({
+            name: product.name,
+            sku: serial(),
+            categoryId: category?.id,
+            storeId: props.storeId,
+            sellingPrice: primaryVariant.price,
+            costPrice: primaryVariant.costPrice,
+            initialStock,
+            variants: product.variants,
+          });
+          successCount++;
+          importedOptionCount += product.variants.length;
+        } catch (cause) {
+          const error = cause as { data?: { message?: string }; message?: string };
+          failures.push(`${product.name}: ${error.data?.message || error.message || "could not be imported"}`);
+        }
+      }
+      setNotice(`Imported ${successCount} product${successCount === 1 ? "" : "s"} with ${importedOptionCount} sellable option${importedOptionCount === 1 ? "" : "s"}.`);
+      if (failures.length) setError(`Could not import ${failures.length} product${failures.length === 1 ? "" : "s"}: ${failures.slice(0, 3).join("; ")}${failures.length > 3 ? "; see the file and try again" : ""}`);
     } catch (err: any) {
       setError(err.message || "Failed to process import file.");
     } finally {
@@ -412,12 +479,12 @@ export function ManageView(props: Props) {
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${section}`} className="min-w-64 flex-1 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none focus:border-sky-500" />
             {section === "products" && (
               <>
-                <button onClick={downloadExcelTemplate} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors" title="Download sample CSV/Excel template">
+                <button onClick={downloadExcelTemplate} className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors" title="Download UTF-8 CSV product template">
                   <Download className="h-4 w-4 text-emerald-400" />Template
                 </button>
-                <input type="file" ref={fileInputRef} accept=".csv,.xlsx,.xls" onChange={handleExcelFileUpload} className="hidden" />
-                <button onClick={() => fileInputRef.current?.click()} disabled={busy} className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50" title="Import multiple products from CSV/Excel">
-                  <FileSpreadsheet className="h-4 w-4" />Import Excel/CSV
+                <input type="file" ref={fileInputRef} accept=".csv,text/csv" onChange={handleExcelFileUpload} className="hidden" />
+                <button onClick={() => fileInputRef.current?.click()} disabled={busy} className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50" title="Import products from a CSV file">
+                  <FileSpreadsheet className="h-4 w-4" />Import CSV
                 </button>
                 <button onClick={() => openStock()} className="flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-slate-900">
                   <RotateCcw className="h-4 w-4" />Adjust stock
