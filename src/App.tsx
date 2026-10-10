@@ -367,8 +367,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory =
-      selectedCategory === "All" || product.category === selectedCategory;
-    const q = searchQuery.toLowerCase();
+      !selectedCategory ||
+      selectedCategory === "All" ||
+      product.category === selectedCategory;
+    const q = searchQuery.trim().toLowerCase();
     const matchesSearch =
       !q ||
       (product.name || "").toLowerCase().includes(q) ||

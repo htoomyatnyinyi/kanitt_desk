@@ -178,7 +178,7 @@ export const kanittApi = createApi({
           costPrice: Number(p.costPrice) || 0,
           price:
             Number(
-              p.price ?? p.variants?.find((v: any) => v.isActive)?.price,
+              p.price ?? p.sellingPrice ?? p.variants?.find((v: any) => v.isActive)?.price ?? p.variants?.[0]?.price,
             ) || 0,
           sku: p.sku || `SKU-${p.id.slice(0, 4)}`,
           stock: Number(p.totalStock ?? p.stock ?? 0),

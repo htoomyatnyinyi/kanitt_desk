@@ -142,13 +142,13 @@ export function PosView({
                 <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
                   {product.category}
                 </span>
-                <span className="text-[10px] font-medium text-slate-500">Stock: {product.stock}</span>
+                <span className="text-[10px] font-medium text-slate-500">Stock: {Number(product.stock) || 0}</span>
               </div>
               <h3 className="font-bold text-slate-100 text-sm mb-1 group-hover:text-sky-300 transition-colors line-clamp-2">
-                {product.name}
+                {product.name || "Unnamed Product"}
               </h3>
               <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
-                <span>SKU: {product.sku}</span>
+                <span>SKU: {product.sku || "—"}</span>
                 {product.barcode && (
                   <span className="text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
                     {product.barcode}
@@ -158,7 +158,7 @@ export function PosView({
             </div>
             <div className="mt-4 flex items-center justify-between pt-3 border-t border-slate-800/50">
               <span className="font-black text-white text-base">
-                {product.price.toLocaleString()} <span className="text-xs text-slate-400 font-normal">MMK</span>
+                {(Number(product.price) || 0).toLocaleString()} <span className="text-xs text-slate-400 font-normal">MMK</span>
               </span>
               <button className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-sky-500 text-slate-300 group-hover:text-white flex items-center justify-center transition-all">
                 <Plus className="w-4 h-4" />
