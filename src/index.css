@@ -11,3 +11,18 @@
   button, input, select { font: inherit; }
   button { cursor: pointer; }
 }
+
+@keyframes animate-in-keyframe {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: animate-in-keyframe 0.25s ease-out;
+}

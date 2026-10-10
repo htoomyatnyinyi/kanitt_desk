@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Barcode, Box, Building2, ContactRound, Download, FileSpreadsheet, PackagePlus, Plus, Printer, RotateCcw, Tags, Truck, Users, X } from "lucide-react";
+import { Barcode, Box, Building2, Check, ChevronLeft, ChevronRight, ContactRound, Download, Eye, FileSpreadsheet, Layers, Package, PackagePlus, Plus, Printer, RotateCcw, Tags, Truck, Users, X } from "lucide-react";
 import QRCode from "qrcode";
 import { Product } from "../types";
 
@@ -43,6 +43,7 @@ const serial = () => `KNT-${Math.random().toString(36).slice(2, 10).toUpperCase(
 export function ManageView(props: Props) {
   const [section, setSection] = useState<Section>("products");
   const [dialog, setDialog] = useState<"create" | "edit" | "stock" | null>(null);
+  const [wizardStep, setWizardStep] = useState(1);
   const [editing, setEditing] = useState<any>(null);
   const [fields, setFields] = useState<Fields>({ ...emptyProduct });
   const [stockFields, setStockFields] = useState({ productId: "", variantId: "", mode: "IN", quantity: "", reason: "" });
@@ -123,7 +124,7 @@ export function ManageView(props: Props) {
   const openCreate = () => {
     setFields({ ...emptyProduct, name: "", categoryId: props.categories[0]?.id ?? "", initialStock: "0" });
     setVariantInputs([{ name: "Each", sku: generateVariantSku("ITEM", "EACH"), price: "", costPrice: "", barcode: generateVariantBarcode(), initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }]);
-    setStaffPermissions([]); setDialog("create"); setError(null); setNotice(null);
+    setStaffPermissions([]); setWizardStep(1); setDialog("create"); setError(null); setNotice(null);
   };
   const openEdit = (item: any) => {
     setEditing(item);
@@ -150,7 +151,7 @@ export function ManageView(props: Props) {
     } else {
       setVariantInputs(section === "products" ? [{ name: "Each", sku: generateVariantSku(), price: String(item.price ?? 0), costPrice: String(item.costPrice ?? 0), barcode: generateVariantBarcode(), initialStock: String(item.stock ?? 0), wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }] : []);
     }
-    setStaffPermissions(item.permissions ?? []); setDialog("edit"); setError(null); setNotice(null);
+    setStaffPermissions(item.permissions ?? []); setWizardStep(1); setDialog("edit"); setError(null); setNotice(null);
   };
   const openStock = (productId = "") => { if (!props.storeId) { setError("Select a store before adjusting stock."); return; } setStockFields({ productId, variantId: "", mode: "IN", quantity: "", reason: "" }); setDialog("stock"); setError(null); setNotice(null); };
   const submit = async (event: FormEvent) => {
@@ -456,8 +457,58 @@ export function ManageView(props: Props) {
       </section>
 
       {dialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <form onSubmit={submit} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={(e) => { if (e.target === e.currentTarget) setDialog(null); }}>
+          <form onSubmit={submit} className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl transition-all duration-300 ${(dialog === "create" || dialog === "edit") && section === "products" ? "max-w-2xl" : "max-w-xl"}`} style={{ padding: 0 }}>
+            {/* ——— Wizard Header for product dialogs ——— */}
+            {(dialog === "create" || dialog === "edit") && section === "products" ? (
+              <div className="sticky top-0 z-10 rounded-t-2xl border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-6 pt-5 pb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{dialog === "edit" ? "Edit product" : "New product"}</h2>
+                    <p className="mt-0.5 text-xs text-slate-500">Saved directly to the selected tenant.</p>
+                  </div>
+                  <button type="button" onClick={() => setDialog(null)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                {/* Step indicator */}
+                <div className="flex items-center gap-1">
+                  {[
+                    { step: 1, label: "Product Info", icon: Package },
+                    { step: 2, label: "Variants & Pricing", icon: Layers },
+                    { step: 3, label: "Review", icon: Eye },
+                  ].map(({ step, label, icon: StepIcon }, idx) => (
+                    <div key={step} className="flex items-center flex-1">
+                      <button
+                        type="button"
+                        onClick={() => { if (step < wizardStep || (step === 2 && fields.name.trim())) setWizardStep(step); }}
+                        className={`group flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-200 w-full ${
+                          wizardStep === step
+                            ? "bg-sky-500/15 text-sky-300 border border-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.08)]"
+                            : wizardStep > step
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 cursor-pointer hover:bg-emerald-500/15"
+                            : "bg-slate-800/50 text-slate-500 border border-slate-800 cursor-default"
+                        }`}
+                      >
+                        <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
+                          wizardStep === step
+                            ? "bg-sky-500 text-white shadow-md shadow-sky-500/30"
+                            : wizardStep > step
+                            ? "bg-emerald-500 text-white"
+                            : "bg-slate-700 text-slate-400"
+                        }`}>
+                          {wizardStep > step ? <Check className="h-3.5 w-3.5" /> : step}
+                        </span>
+                        <span className="hidden sm:inline truncate">{label}</span>
+                        <StepIcon className={`h-3.5 w-3.5 sm:hidden flex-shrink-0 ${wizardStep === step ? "text-sky-400" : wizardStep > step ? "text-emerald-400" : "text-slate-600"}`} />
+                      </button>
+                      {idx < 2 && <div className={`hidden sm:block mx-1 h-px flex-shrink-0 w-4 transition-colors ${wizardStep > step ? "bg-emerald-500/40" : "bg-slate-700"}`} />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+            <div className="px-6 pt-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-white">{dialog === "stock" ? "Stock adjustment" : dialog === "edit" ? `Edit ${labels[section as EntitySection]}` : `Add ${labels[section as EntitySection]}`}</h2>
@@ -467,9 +518,10 @@ export function ManageView(props: Props) {
                 <X className="h-5 w-5" />
               </button>
             </div>
+            </div>)}
 
             {dialog === "stock" ? (
-              <div className="space-y-4">
+              <div className="space-y-4 px-6 py-5">
                 <label className="block text-xs text-slate-400">Product
                   <select required value={stockFields.productId} onChange={(event) => setStockFields((current) => ({ ...current, productId: event.target.value, variantId: "" }))} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
                     <option value="">Choose product</option>
@@ -500,90 +552,184 @@ export function ManageView(props: Props) {
                 </label>
               </div>
             ) : section === "products" ? (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Product details</h3>
-                  <p className="mt-1 text-xs text-slate-400">These details describe the product. Price and stock are set below for each option.</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {[{ name: "name", label: "Product name", required: true, type: "text" }].map((field) => (
-                    <label key={field.name} className="text-xs text-slate-400">{field.label}
-                      <input required={dialog === "create" && field.required} type={field.type || "text"} value={fields[field.name]} onChange={(event) => setField(field.name, event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white" />
-                    </label>
-                  ))}
-                  <label className="text-xs text-slate-400">Category <span className="text-slate-600">(optional)</span>
-                    <select value={fields.categoryId} onChange={(event) => setField("categoryId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
-                      <option value="">No category</option>
-                      {props.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-xs text-slate-400">Brand (optional)
-                    <select value={fields.brandId} onChange={(event) => setField("brandId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
-                      <option value="">No brand</option>
-                      {props.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="text-xs text-slate-400 sm:col-span-2">Supplier (optional)
-                    <select value={fields.supplierId} onChange={(event) => setField("supplierId", event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white">
-                      <option value="">No supplier</option>
-                      {props.suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-                    </select>
-                  </label>
-                </div>
+              <div className="px-6 py-5">
+                {/* ═══════ STEP 1: Product Info ═══════ */}
+                {wizardStep === 1 && (
+                  <div className="space-y-5 animate-in">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Package className="h-4 w-4 text-sky-400" />Product details</h3>
+                      <p className="mt-1 text-xs text-slate-500">Basic information about this product. Pricing comes next.</p>
+                    </div>
+                    <div className="space-y-4">
+                      <label className="block text-xs font-medium text-slate-400">Product name <span className="text-rose-400">*</span>
+                        <input required autoFocus placeholder="e.g. Classic White T-Shirt" value={fields.name} onChange={(e) => setField("name", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-none transition-all" />
+                      </label>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block text-xs font-medium text-slate-400">Category <span className="text-slate-600">(optional)</span>
+                          <select value={fields.categoryId} onChange={(e) => setField("categoryId", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white focus:border-sky-500 outline-none transition-all">
+                            <option value="">No category</option>
+                            {props.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </label>
+                        <label className="block text-xs font-medium text-slate-400">Brand <span className="text-slate-600">(optional)</span>
+                          <select value={fields.brandId} onChange={(e) => setField("brandId", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white focus:border-sky-500 outline-none transition-all">
+                            <option value="">No brand</option>
+                            {props.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="block text-xs font-medium text-slate-400">Supplier <span className="text-slate-600">(optional)</span>
+                        <select value={fields.supplierId} onChange={(e) => setField("supplierId", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white focus:border-sky-500 outline-none transition-all">
+                          <option value="">No supplier</option>
+                          {props.suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    {/* Tip card */}
+                    <div className="flex items-start gap-3 rounded-xl border border-sky-500/15 bg-sky-500/5 px-4 py-3">
+                      <Package className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-400" />
+                      <p className="text-xs text-sky-300/80 leading-relaxed">In the next step, you'll add sellable options (variants) with individual pricing, SKU, and stock quantities.</p>
+                    </div>
+                  </div>
+                )}
 
-                <section className="border-t border-slate-800 pt-5">
-                  <div className="mb-3">
-                    <h4 className="text-sm font-bold text-white">What can customers buy?</h4>
-                    <p className="mt-1 text-xs text-slate-400">Add one option for a regular product, or more options for sizes, colors, and packs.</p>
-                  </div>
-                  <div className="space-y-3">
-                    {variantInputs.map((v, i) => (
-                      <article key={i} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-                        <div className="mb-3 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-slate-300">{variantInputs.length === 1 ? "Sellable option" : `Option ${i + 1}`}</span>
-                          {variantInputs.length > 1 && <button type="button" aria-label={`Remove option ${i + 1}`} onClick={() => removeVariantInput(i)} className="rounded-md p-1 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"><X className="h-4 w-4" /></button>}
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <label className="text-xs text-slate-400">Option name <span className="text-rose-300">*</span>
-                            <input required placeholder="e.g. Red / M, 500ml, Each" value={v.name} onChange={(e) => updateVariantInput(i, "name", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
-                          </label>
-                          <label className="text-xs text-slate-400">Selling price (MMK) <span className="text-rose-300">*</span>
-                            <input required type="number" min="0" step="0.01" placeholder="0" value={v.price} onChange={(e) => updateVariantInput(i, "price", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
-                          </label>
-                          <label className="text-xs text-slate-400">Variant SKU
-                            <input placeholder="Unique SKU (auto-generated if empty)" value={v.sku ?? ""} onChange={(e) => updateVariantInput(i, "sku", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white font-mono" />
-                          </label>
-                          <label className="text-xs text-slate-400">Variant Barcode / QR Code
-                            <input placeholder="Unique barcode for barcode scanner" value={v.barcode ?? ""} onChange={(e) => updateVariantInput(i, "barcode", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white font-mono" />
-                          </label>
-                          <label className="text-xs text-slate-400">Cost price <span className="text-slate-600">(optional)</span>
-                            <input type="number" min="0" step="0.01" placeholder="0" value={v.costPrice ?? ""} onChange={(e) => updateVariantInput(i, "costPrice", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
-                          </label>
-                          {dialog === "create" && <label className="text-xs text-slate-400">Starting stock
-                            <input type="number" min="0" step="1" placeholder="0" value={v.initialStock ?? "0"} onChange={(e) => updateVariantInput(i, "initialStock", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
-                          </label>}
-                        </div>
-                        <details className="mt-3 border-t border-slate-800 pt-3">
-                          <summary className="cursor-pointer select-none text-xs font-medium text-sky-300">More option details <span className="font-normal text-slate-500">(wholesale, color, size, expiry dates)</span></summary>
-                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                            {[{ key: "wholesalePrice", label: "Wholesale price", type: "number" }, { key: "wholesaleMinQuantity", label: "Wholesale minimum quantity", type: "number" }, { key: "color", label: "Color", type: "text" }, { key: "size", label: "Size", type: "text" }, { key: "manufacturingDate", label: "Manufacturing date", type: "date" }, { key: "expiryDate", label: "Expiry date", type: "date" }, { key: "bestBeforeDate", label: "Best before date", type: "date" }].map((field) => (
-                              <label key={field.key} className="text-xs text-slate-400">{field.label}
-                                <input type={field.type} min={field.type === "number" ? "0" : undefined} step={field.key.toLowerCase().includes("price") ? "0.01" : undefined} value={(v as any)[field.key] ?? ""} onChange={(e) => updateVariantInput(i, field.key, e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white" />
-                              </label>
-                            ))}
+                {/* ═══════ STEP 2: Variants & Pricing ═══════ */}
+                {wizardStep === 2 && (
+                  <div className="space-y-4 animate-in">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Layers className="h-4 w-4 text-sky-400" />Variants & Pricing</h3>
+                        <p className="mt-1 text-xs text-slate-500">Each variant has its own SKU, barcode, price, and stock.</p>
+                      </div>
+                      <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-400">{variantInputs.length} {variantInputs.length === 1 ? "variant" : "variants"}</span>
+                    </div>
+                    <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
+                      {variantInputs.map((v, i) => (
+                        <article key={i} className="group rounded-xl border border-slate-700/80 bg-gradient-to-b from-slate-950 to-slate-900 transition-all hover:border-slate-600">
+                          {/* Variant header */}
+                          <div className="flex items-center justify-between border-b border-slate-800/60 px-4 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-500/10 text-[10px] font-bold text-sky-400">{i + 1}</span>
+                              <span className="text-xs font-semibold text-slate-200">{v.name || `Variant ${i + 1}`}</span>
+                              {v.sku && <span className="hidden sm:inline rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">{v.sku}</span>}
+                            </div>
+                            {variantInputs.length > 1 && (
+                              <button type="button" aria-label={`Remove option ${i + 1}`} onClick={() => removeVariantInput(i)} className="rounded-md p-1.5 text-slate-600 opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 hover:text-rose-400 transition-all">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
-                        </details>
-                      </article>
-                    ))}
+                          {/* Variant body */}
+                          <div className="p-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <label className="text-xs font-medium text-slate-400">Option name <span className="text-rose-400">*</span>
+                                <input required placeholder="e.g. Red / M, 500ml, Each" value={v.name} onChange={(e) => updateVariantInput(i, "name", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-sky-500 outline-none transition-all" />
+                              </label>
+                              <label className="text-xs font-medium text-slate-400">Selling price (MMK) <span className="text-rose-400">*</span>
+                                <input required type="number" min="0" step="0.01" placeholder="0" value={v.price} onChange={(e) => updateVariantInput(i, "price", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-sky-500 outline-none transition-all" />
+                              </label>
+                              <label className="text-xs font-medium text-slate-400">SKU <span className="text-slate-600">(auto-generated)</span>
+                                <input placeholder="Auto-generated" value={v.sku ?? ""} onChange={(e) => updateVariantInput(i, "sku", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:border-sky-500 outline-none transition-all" />
+                              </label>
+                              <label className="text-xs font-medium text-slate-400">Barcode <span className="text-slate-600">(auto-generated)</span>
+                                <input placeholder="Auto-generated" value={v.barcode ?? ""} onChange={(e) => updateVariantInput(i, "barcode", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white font-mono placeholder:text-slate-600 focus:border-sky-500 outline-none transition-all" />
+                              </label>
+                              <label className="text-xs font-medium text-slate-400">Cost price <span className="text-slate-600">(optional)</span>
+                                <input type="number" min="0" step="0.01" placeholder="0" value={v.costPrice ?? ""} onChange={(e) => updateVariantInput(i, "costPrice", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-sky-500 outline-none transition-all" />
+                              </label>
+                              {dialog === "create" && (
+                                <label className="text-xs font-medium text-slate-400">Starting stock
+                                  <input type="number" min="0" step="1" placeholder="0" value={v.initialStock ?? "0"} onChange={(e) => updateVariantInput(i, "initialStock", e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-sky-500 outline-none transition-all" />
+                                </label>
+                              )}
+                            </div>
+                            {/* Expandable advanced fields */}
+                            <details className="mt-3 border-t border-slate-800/50 pt-3">
+                              <summary className="cursor-pointer select-none text-xs font-medium text-sky-300/70 hover:text-sky-300 transition-colors">Advanced details <span className="font-normal text-slate-600">(wholesale, color, size, dates)</span></summary>
+                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                {[{ key: "wholesalePrice", label: "Wholesale price", type: "number" }, { key: "wholesaleMinQuantity", label: "Min. wholesale qty", type: "number" }, { key: "color", label: "Color", type: "text" }, { key: "size", label: "Size", type: "text" }, { key: "manufacturingDate", label: "Mfg date", type: "date" }, { key: "expiryDate", label: "Expiry date", type: "date" }, { key: "bestBeforeDate", label: "Best before", type: "date" }].map((field) => (
+                                  <label key={field.key} className="text-xs font-medium text-slate-400">{field.label}
+                                    <input type={field.type} min={field.type === "number" ? "0" : undefined} step={field.key.toLowerCase().includes("price") ? "0.01" : undefined} value={(v as any)[field.key] ?? ""} onChange={(e) => updateVariantInput(i, field.key, e.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-white focus:border-sky-500 outline-none transition-all" />
+                                  </label>
+                                ))}
+                              </div>
+                            </details>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <button type="button" onClick={addVariantInput} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-600/80 px-4 py-3 text-sm font-semibold text-sky-300/80 hover:border-sky-500 hover:bg-sky-500/5 hover:text-sky-300 transition-all">
+                      <Plus className="h-4 w-4" />Add another variant
+                    </button>
                   </div>
-                  <button type="button" onClick={addVariantInput} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-600 px-4 py-3 text-sm font-semibold text-sky-300 hover:border-sky-500 hover:bg-sky-500/5">
-                    <Plus className="h-4 w-4" />Add another option
-                  </button>
-                  {variantInputs.length > 1 && <p className="mt-2 text-center text-[11px] text-slate-500">Each option has its own price and stock.</p>}
-                </section>
+                )}
+
+                {/* ═══════ STEP 3: Review & Confirm ═══════ */}
+                {wizardStep === 3 && (
+                  <div className="space-y-5 animate-in">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white flex items-center gap-2"><Eye className="h-4 w-4 text-sky-400" />Review before {dialog === "edit" ? "saving" : "creating"}</h3>
+                      <p className="mt-1 text-xs text-slate-500">Double-check everything looks correct.</p>
+                    </div>
+
+                    {/* Product summary card */}
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-950/60 overflow-hidden">
+                      <div className="border-b border-slate-800/60 bg-slate-800/20 px-4 py-2.5">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Product</h4>
+                      </div>
+                      <div className="px-4 py-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Name</span>
+                          <span className="text-sm font-semibold text-white">{fields.name || "—"}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Category</span>
+                          <span className="text-sm text-slate-300">{props.categories.find((c) => c.id === fields.categoryId)?.name || "None"}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Brand</span>
+                          <span className="text-sm text-slate-300">{props.brands.find((b) => b.id === fields.brandId)?.name || "None"}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500">Supplier</span>
+                          <span className="text-sm text-slate-300">{props.suppliers.find((s) => s.id === fields.supplierId)?.name || "None"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Variants summary table */}
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-950/60 overflow-hidden">
+                      <div className="border-b border-slate-800/60 bg-slate-800/20 px-4 py-2.5 flex items-center justify-between">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Variants ({variantInputs.length})</h4>
+                        <span className="text-xs text-slate-500">Total stock: {variantInputs.reduce((sum, v) => sum + (Number(v.initialStock) || 0), 0)}</span>
+                      </div>
+                      <div className="divide-y divide-slate-800/40">
+                        {variantInputs.map((v, i) => (
+                          <div key={i} className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-2.5">
+                            <div>
+                              <p className="text-sm font-medium text-slate-200">{v.name || `Variant ${i + 1}`}</p>
+                              <p className="mt-0.5 font-mono text-[10px] text-slate-500">{v.sku}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-emerald-400">{Number(v.price || 0).toLocaleString()} MMK</p>
+                              {v.costPrice && <p className="text-[10px] text-slate-500">Cost: {Number(v.costPrice).toLocaleString()}</p>}
+                            </div>
+                            <span className="rounded-lg bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-400">{v.initialStock || 0} qty</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Confirmation notice */}
+                    <div className="flex items-start gap-3 rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-4 py-3">
+                      <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400" />
+                      <p className="text-xs text-emerald-300/80 leading-relaxed">{dialog === "edit" ? "Saving will update the product and all listed variants on the server." : "This will create the product with all listed variants and assign them to your active store."}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 px-6 py-5">
                 {formFields[section as EntitySection].map((field) => (
                   <label key={field.name} className="text-xs text-slate-400">{field.label}
                     {field.type?.startsWith("select:") ? (
@@ -611,10 +757,48 @@ export function ManageView(props: Props) {
               </div>
             )}
 
-            {error && <p role="alert" className="mt-4 rounded-lg bg-rose-500/10 p-3 text-xs text-rose-300">{error}</p>}
-            <div className="mt-6 flex justify-end gap-3">
-              <button type="button" onClick={() => setDialog(null)} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300">Cancel</button>
-              <button disabled={busy} className="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Saving…" : dialog === "stock" ? "Save adjustment" : dialog === "edit" ? "Save changes" : `Create ${labels[section as EntitySection]}`}</button>
+            {error && <p role="alert" className="mx-6 mt-4 rounded-lg bg-rose-500/10 p-3 text-xs text-rose-300">{error}</p>}
+            {/* ——— Footer / navigation ——— */}
+            <div className="sticky bottom-0 rounded-b-2xl border-t border-slate-800 bg-slate-900/95 backdrop-blur-sm px-6 py-4 flex items-center justify-between">
+              {(dialog === "create" || dialog === "edit") && section === "products" ? (
+                <>
+                  {wizardStep > 1 ? (
+                    <button type="button" onClick={() => { setWizardStep((s) => s - 1); setError(null); }} className="flex items-center gap-1.5 rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-all">
+                      <ChevronLeft className="h-4 w-4" />Back
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => setDialog(null)} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-all">Cancel</button>
+                  )}
+                  {wizardStep < 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        if (wizardStep === 1 && !fields.name.trim()) { setError("Product name is required."); return; }
+                        if (wizardStep === 2) {
+                          const namedVariants = variantInputs.filter((v) => v.name.trim());
+                          if (!namedVariants.length) { setError("Add at least one named variant."); return; }
+                          const missingPrice = namedVariants.some((v) => !v.price || Number(v.price) <= 0);
+                          if (missingPrice) { setError("Every variant needs a selling price greater than 0."); return; }
+                        }
+                        setWizardStep((s) => s + 1);
+                      }}
+                      className="flex items-center gap-1.5 rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-sky-400 shadow-md shadow-sky-500/20 transition-all"
+                    >
+                      Next<ChevronRight className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button disabled={busy} className="flex items-center gap-1.5 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-400 shadow-md shadow-emerald-500/20 disabled:opacity-50 transition-all">
+                      {busy ? "Saving…" : <><Check className="h-4 w-4" />{dialog === "edit" ? "Save changes" : "Create product"}</>}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => setDialog(null)} className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800 transition-all">Cancel</button>
+                  <button disabled={busy} className="rounded-xl bg-sky-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 hover:bg-sky-400 transition-all">{busy ? "Saving…" : dialog === "stock" ? "Save adjustment" : dialog === "edit" ? "Save changes" : `Create ${labels[section as EntitySection]}`}</button>
+                </>
+              )}
             </div>
           </form>
         </div>
