@@ -68,10 +68,21 @@ export function ManageView(props: Props) {
 
   const [variantInputs, setVariantInputs] = useState<{ id?: string; name: string; sku: string; price: string; costPrice?: string; barcode?: string; initialStock?: string; wholesalePrice?: string; wholesaleMinQuantity?: string; color?: string; size?: string; manufacturingDate?: string; expiryDate?: string; bestBeforeDate?: string }[]>([]);
 
+  const slugifySkuToken = (str: string) => str.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+
+  const generateVariantSku = (productName?: string, variantName?: string) => {
+    const prodCode = productName ? slugifySkuToken(productName) : "PRD";
+    const varCode = variantName ? slugifySkuToken(variantName) : "VAR";
+    const randomSuffix = Math.random().toString(36).slice(2, 5).toUpperCase();
+    return `${prodCode || "ITEM"}-${varCode || "OPT"}-${randomSuffix}`;
+  };
+
+  const generateVariantBarcode = () => `${Math.floor(100000000000 + Math.random() * 900000000000)}`;
+
   const addVariantInput = () => {
     setVariantInputs((prev) => [
       ...prev,
-      { name: "", sku: "", price: "", costPrice: "", barcode: "", initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" },
+      { name: "", sku: generateVariantSku(fields.name, `VAR-${prev.length + 1}`), price: "", costPrice: "", barcode: generateVariantBarcode(), initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" },
     ]);
   };
 
@@ -79,19 +90,45 @@ export function ManageView(props: Props) {
     setVariantInputs((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const setField = (key: string, value: string) => {
+    setFields((current) => {
+      const updated = { ...current, [key]: value };
+      if (key === "name" && dialog === "create") {
+        setVariantInputs((prev) =>
+          prev.map((v) => ({
+            ...v,
+            sku: v.sku.startsWith("ITEM-") || v.sku.includes("-") ? generateVariantSku(value, v.name || "OPTION") : v.sku,
+          }))
+        );
+      }
+      return updated;
+    });
+  };
+
   const updateVariantInput = (index: number, key: string, value: string) => {
     setVariantInputs((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [key]: value };
+      const currentVal = next[index];
+      let newSku = currentVal.sku;
+
+      if (key === "name" && dialog === "create") {
+        newSku = generateVariantSku(fields.name, value || `VAR-${index + 1}`);
+      }
+
+      next[index] = { ...next[index], [key]: value, sku: key === "name" ? newSku : (key === "sku" ? value : currentVal.sku) };
       return next;
     });
   };
 
-  const openCreate = () => { setFields({ ...emptyProduct, name: "", sku: serial(), barcode: "", categoryId: props.categories[0]?.id ?? "", initialStock: "0" }); setVariantInputs([{ name: "Each", sku: "", price: "", costPrice: "", barcode: "", initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }]); setStaffPermissions([]); setDialog("create"); setError(null); setNotice(null); };
+  const openCreate = () => {
+    setFields({ ...emptyProduct, name: "", categoryId: props.categories[0]?.id ?? "", initialStock: "0" });
+    setVariantInputs([{ name: "Each", sku: generateVariantSku("ITEM", "EACH"), price: "", costPrice: "", barcode: generateVariantBarcode(), initialStock: "0", wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }]);
+    setStaffPermissions([]); setDialog("create"); setError(null); setNotice(null);
+  };
   const openEdit = (item: any) => {
     setEditing(item);
     const values: Fields = section === "products"
-      ? { name: item.name || "", sku: item.sku || "", barcode: item.barcode || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? "") }
+      ? { name: item.name || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? "") }
       : Object.fromEntries(formFields[section as EntitySection].map(({ name }) => [name, name === "password" ? "" : String(item[name] ?? "")]));
     setFields(values);
     if (section === "products" && item.variants?.length) {
@@ -99,10 +136,10 @@ export function ManageView(props: Props) {
         item.variants.map((v: any) => ({
           id: v.id,
           name: v.name || "",
-          sku: v.sku || "",
+          sku: v.sku || generateVariantSku(),
           price: String(v.price ?? ""),
           costPrice: String(v.costPrice ?? ""),
-          barcode: v.barcode || "",
+          barcode: v.barcode || generateVariantBarcode(),
           initialStock: String(v.stock ?? 0),
           wholesalePrice: v.wholesalePrice == null ? "" : String(v.wholesalePrice),
           wholesaleMinQuantity: String(v.wholesaleMinQuantity ?? 1),
@@ -111,12 +148,11 @@ export function ManageView(props: Props) {
         }))
       );
     } else {
-      setVariantInputs(section === "products" ? [{ name: "Each", sku: "", price: String(item.price ?? 0), costPrice: String(item.costPrice ?? 0), barcode: "", initialStock: String(item.stock ?? 0), wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }] : []);
+      setVariantInputs(section === "products" ? [{ name: "Each", sku: generateVariantSku(), price: String(item.price ?? 0), costPrice: String(item.costPrice ?? 0), barcode: generateVariantBarcode(), initialStock: String(item.stock ?? 0), wholesalePrice: "", wholesaleMinQuantity: "1", color: "", size: "", manufacturingDate: "", expiryDate: "", bestBeforeDate: "" }] : []);
     }
     setStaffPermissions(item.permissions ?? []); setDialog("edit"); setError(null); setNotice(null);
   };
   const openStock = (productId = "") => { if (!props.storeId) { setError("Select a store before adjusting stock."); return; } setStockFields({ productId, variantId: "", mode: "IN", quantity: "", reason: "" }); setDialog("stock"); setError(null); setNotice(null); };
-  const setField = (key: string, value: string) => setFields((current) => ({ ...current, [key]: value }));
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError(null);
     try {
@@ -161,12 +197,12 @@ export function ManageView(props: Props) {
         if (!props.storeId) throw new Error("Select a store before creating a product.");
         const parsedVariants = variantInputs
           .filter((v) => v.name.trim())
-          .map((v) => ({
+          .map((v, idx) => ({
             name: v.name.trim(),
-            sku: v.sku.trim() || undefined,
+            sku: v.sku.trim() || generateVariantSku(fields.name, v.name.trim() || `VAR${idx + 1}`),
             price: Number(v.price) || Number(fields.sellingPrice) || 0,
             costPrice: v.costPrice ? Number(v.costPrice) : undefined,
-            barcode: v.barcode?.trim() || undefined,
+            barcode: v.barcode?.trim() || generateVariantBarcode(),
             initialStock: Math.max(0, Math.floor(Number(v.initialStock) || 0)),
             wholesalePrice: v.wholesalePrice ? Number(v.wholesalePrice) : undefined,
             wholesaleMinQuantity: Math.max(1, Number(v.wholesaleMinQuantity) || 1),
@@ -224,9 +260,9 @@ export function ManageView(props: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const downloadExcelTemplate = () => {
-    const headers = "Product Name,SKU,Barcode,Cost Price,Selling Price,Initial Stock,Category Name,Variant Name,Variant SKU,Variant Price\n";
-    const exampleRow1 = "Sample T-Shirt,TS-1001,8850001001,5000,7500,50,Apparel,Red / M,TS-1001-RED-M,7500\n";
-    const exampleRow2 = "Sample T-Shirt,TS-1001,8850001001,5000,7500,30,Apparel,Blue / L,TS-1001-BLU-L,8000\n";
+    const headers = "Product Name,Category Name,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock\n";
+    const exampleRow1 = "Sample T-Shirt,Apparel,Red / M,TS-1001-RED-M,885000100101,7500,5000,50\n";
+    const exampleRow2 = "Sample T-Shirt,Apparel,Blue / L,TS-1001-BLU-L,885000100102,8000,5000,30\n";
     const blob = new Blob([headers + exampleRow1 + exampleRow2], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -261,7 +297,7 @@ export function ManageView(props: Props) {
         const row = lines[i].split(",").map((col) => col.trim().replace(/^["']|["']$/g, ""));
         if (!row[0]) continue;
 
-        const [name, sku, barcode, costPriceStr, sellingPriceStr, initialStockStr, categoryName, variantName, variantSku, variantPriceStr] = row;
+        const [name, categoryName, variantName, variantSku, variantBarcode, sellingPriceStr, costPriceStr, initialStockStr] = row;
         const sellingPrice = Number(sellingPriceStr) || 0;
         const costPrice = Number(costPriceStr) || 0;
         const initialStock = Math.max(0, Math.floor(Number(initialStockStr) || 0));
@@ -272,20 +308,22 @@ export function ManageView(props: Props) {
           if (matchedCat) catId = matchedCat.id;
         }
 
-        const variantObj = variantName ? [{
-          name: variantName,
-          sku: variantSku || `${sku || "SKU"}-${variantName}`,
-          price: Number(variantPriceStr) || sellingPrice,
+        const vName = variantName || "Each";
+        const vSku = variantSku || `SKU-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        const vBarcode = variantBarcode || `${Math.floor(100000000000 + Math.random() * 900000000000)}`;
+
+        const variantObj = [{
+          name: vName,
+          sku: vSku,
+          barcode: vBarcode,
+          price: sellingPrice,
+          costPrice,
           initialStock,
-        }] : undefined;
+        }];
 
         try {
           await props.onCreateProduct({
             name,
-            sku: sku || `SKU-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-            barcode: barcode || undefined,
-            costPrice,
-            sellingPrice,
             storeId: props.storeId,
             initialStock,
             categoryId: catId,
