@@ -843,6 +843,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       {activeTab === "sessions" && (
         <SessionsView
           sessions={apiSessions}
+          orders={apiOrders}
           storeId={selectedStore?.id}
           storeName={selectedStore?.name}
           onOpen={(storeId, openingBalance) =>

@@ -21,6 +21,13 @@ interface ReportsViewProps {
 }
 
 const fmt = (num: number) => `${Math.round(num).toLocaleString()} MMK`;
+const localDayKey = (value: string | Date) => {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+const isCountedPaidOrder = (order: ApiOrder) =>
+  !["VOIDED", "CANCELLED", "REFUNDED"].includes(String(order.status).toUpperCase()) &&
+  (order.status === "COMPLETED" || order.paymentStatus === "PAID");
 
 export function ReportsView({
   orders = [],
@@ -42,12 +49,11 @@ export function ReportsView({
     } else if (range === "30d") {
       cutoff.setDate(now.getDate() - 30);
     } else {
-      return orders.filter((o) => o.status === "COMPLETED" || o.paymentStatus === "PAID");
+      return orders.filter(isCountedPaidOrder);
     }
 
     return orders.filter((o) => {
-      const isPaid = o.status === "COMPLETED" || o.paymentStatus === "PAID";
-      return isPaid && new Date(o.createdAt) >= cutoff;
+      return isCountedPaidOrder(o) && new Date(o.createdAt) >= cutoff;
     });
   }, [orders, range]);
 
@@ -135,10 +141,10 @@ export function ReportsView({
     const list = Array.from({ length: days }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (days - 1 - i));
-      const dateStr = d.toISOString().slice(0, 10);
+      const dateStr = localDayKey(d);
 
       const dayOrders = filteredOrders.filter(
-        (o) => new Date(o.createdAt).toISOString().slice(0, 10) === dateStr
+        (o) => localDayKey(o.createdAt) === dateStr
       );
       const rev = dayOrders.reduce((sum, o) => sum + (o.grandTotal || 0), 0);
       return {

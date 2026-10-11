@@ -60,6 +60,11 @@ export interface Session {
   closedAt?: string | null;
   openingBalance: number;
   closingBalance?: number | null;
+  expectedBalance?: number | null;
+  discrepancy?: number | null;
+  cashSales?: number;
+  cardSales?: number;
+  digitalSales?: number;
   status: "OPEN" | "CLOSED";
   store?: { name: string };
 }
@@ -68,10 +73,12 @@ export interface ApiOrder {
   id: string;
   orderNumber?: string;
   storeId: string;
+  sessionId?: string | null;
   createdAt: string;
   status: string;
   paymentStatus?: string;
   paymentMethod?: string;
+  paymentBreakdown?: { method: string; amount: number }[];
   subTotal?: number;
   taxAmount?: number;
   discountAmount?: number;
