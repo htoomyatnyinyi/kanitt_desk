@@ -24,7 +24,14 @@ export interface Product {
   price: number;
   sku: string;
   stock?: number;
-  inventories?: { quantity: number; lot?: { number: string; expiryDate?: string | null; manufacturingDate?: string | null } | null }[];
+  inventories?: {
+    quantity: number;
+    lot?: {
+      number: string;
+      expiryDate?: string | null;
+      manufacturingDate?: string | null;
+    } | null;
+  }[];
   barcode?: string;
   imageUrl?: string;
   variants?: {
@@ -178,15 +185,33 @@ export const kanittApi = createApi({
           costPrice: Number(p.costPrice) || 0,
           price:
             Number(
-              p.price ?? p.sellingPrice ?? p.variants?.find((v: any) => v.isActive)?.price ?? p.variants?.[0]?.price,
+              p.price ??
+                p.sellingPrice ??
+                p.variants?.find((v: any) => v.isActive)?.price ??
+                p.variants?.[0]?.price,
             ) || 0,
           sku: p.sku || `SKU-${p.id.slice(0, 4)}`,
           stock: Number(p.totalStock ?? p.stock ?? 0),
-          inventories: Array.isArray(p.inventories) ? p.inventories.map((inventory: any) => ({
-            quantity: Number(inventory.quantity) || 0,
-            lot: inventory.lot ? { number: inventory.lot.number, expiryDate: inventory.lot.expiryDate, manufacturingDate: inventory.lot.manufacturingDate } : null,
-          })) : [],
+          inventories: Array.isArray(p.inventories)
+            ? p.inventories.map((inventory: any) => ({
+                quantity: Number(inventory.quantity) || 0,
+                lot: inventory.lot
+                  ? {
+                      number: inventory.lot.number,
+                      expiryDate: inventory.lot.expiryDate,
+                      manufacturingDate: inventory.lot.manufacturingDate,
+                    }
+                  : null,
+              }))
+            : [],
           barcode: p.barcode || "",
+          // Medicine / Pharmacy fields
+          genericName: p.genericName || "",
+          activeIngredient: p.activeIngredient || "",
+          strength: p.strength || "",
+          dosageForm: p.dosageForm || "",
+          manufacturer: p.manufacturer || "",
+          registrationNumber: p.registrationNumber || "",
           variants: Array.isArray(p.variants)
             ? p.variants.map((v: any) => ({
                 id: v.id,
@@ -359,7 +384,10 @@ export const kanittApi = createApi({
       invalidatesTags: ["Products", "Inventory"],
     }),
     getPurchaseOrders: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/purchase-orders", params: { limit: 10000 } }),
+      query: () => ({
+        url: "/tenant/purchase-orders",
+        params: { limit: 10000 },
+      }),
       transformResponse: (r: any) => unwrapList(r, "purchaseOrders"),
       providesTags: ["PurchaseOrders"],
     }),
@@ -384,7 +412,17 @@ export const kanittApi = createApi({
     }),
     receivePurchaseOrder: builder.mutation<
       any,
-      { id: string; storeId: string; lots?: { purchaseOrderItemId: string; number: string; expiryDate?: string; manufacturingDate?: string; bestBeforeDate?: string }[] }
+      {
+        id: string;
+        storeId: string;
+        lots?: {
+          purchaseOrderItemId: string;
+          number: string;
+          expiryDate?: string;
+          manufacturingDate?: string;
+          bestBeforeDate?: string;
+        }[];
+      }
     >({
       query: ({ id, storeId, lots }) => ({
         url: `/tenant/purchase-orders/${id}/receive`,
@@ -435,7 +473,10 @@ export const kanittApi = createApi({
       invalidatesTags: ["SupplierPayments", "Suppliers"],
     }),
     getStockTransfers: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/stock-transfers", params: { limit: 10000 } }),
+      query: () => ({
+        url: "/tenant/stock-transfers",
+        params: { limit: 10000 },
+      }),
       transformResponse: (r: any) => unwrapList(r, "stockTransfers"),
       providesTags: ["StockTransfers"],
     }),
@@ -712,120 +753,138 @@ export const kanittApi = createApi({
     }),
 
     // ── Admin: Tenant Profile ────────────────────────────────────────────
-  getTenantProfile: builder.query<any, void>({
-    query: () => "/tenant/profile",
-    transformResponse: (r: any) => r?.tenant ?? r,
-    providesTags: ["TenantProfile"],
-  }),
-  updateTenantProfile: builder.mutation<
-    any,
-    { name?: string; email?: string; phone?: string }
-  >({
-    query: (body) => ({ url: "/tenant/profile", method: "PUT", body }),
-    invalidatesTags: ["TenantProfile"],
-  }),
+    getTenantProfile: builder.query<any, void>({
+      query: () => "/tenant/profile",
+      transformResponse: (r: any) => r?.tenant ?? r,
+      providesTags: ["TenantProfile"],
+    }),
+    updateTenantProfile: builder.mutation<
+      any,
+      { name?: string; email?: string; phone?: string }
+    >({
+      query: (body) => ({ url: "/tenant/profile", method: "PUT", body }),
+      invalidatesTags: ["TenantProfile"],
+    }),
 
-  // ── Admin: Store Settings ────────────────────────────────────────────
-  getStoreSettings: builder.query<any[], { storeId?: string }>({
-    query: ({ storeId }) => ({
-      url: "/tenant/store-settings",
-      params: { ...(storeId ? { storeId } : {}) },
+    // ── Admin: Store Settings ────────────────────────────────────────────
+    getStoreSettings: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId }) => ({
+        url: "/tenant/store-settings",
+        params: { ...(storeId ? { storeId } : {}) },
+      }),
+      transformResponse: (r: any) =>
+        Array.isArray(r) ? r : (r?.settings ?? []),
+      providesTags: ["StoreSettings"],
     }),
-    transformResponse: (r: any) => (Array.isArray(r) ? r : (r?.settings ?? [])),
-    providesTags: ["StoreSettings"],
-  }),
-  upsertStoreSetting: builder.mutation<
-    any,
-    {
-      storeId: string;
-      settingKey: string;
-      settingValue: unknown;
-      description?: string;
-    }
-  >({
-    query: (body) => ({ url: "/tenant/store-settings", method: "POST", body }),
-    invalidatesTags: ["StoreSettings"],
-  }),
-  deleteStoreSetting: builder.mutation<any, string>({
-    query: (id) => ({ url: `/tenant/store-settings/${id}`, method: "DELETE" }),
-    invalidatesTags: ["StoreSettings"],
-  }),
+    upsertStoreSetting: builder.mutation<
+      any,
+      {
+        storeId: string;
+        settingKey: string;
+        settingValue: unknown;
+        description?: string;
+      }
+    >({
+      query: (body) => ({
+        url: "/tenant/store-settings",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["StoreSettings"],
+    }),
+    deleteStoreSetting: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/tenant/store-settings/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["StoreSettings"],
+    }),
 
-  // ── Admin: API Keys ──────────────────────────────────────────────────
-  getApiKeys: builder.query<any[], void>({
-    query: () => "/tenant/api-keys",
-    transformResponse: (r: any) => (Array.isArray(r) ? r : (r?.apiKeys ?? [])),
-    providesTags: ["ApiKeys"],
-  }),
-  createApiKey: builder.mutation<
-    any,
-    { userId: string; name: string; permissions?: string[]; expiresAt?: string }
-  >({
-    query: (body) => ({ url: "/tenant/api-keys", method: "POST", body }),
-    invalidatesTags: ["ApiKeys"],
-  }),
-  revokeApiKey: builder.mutation<any, string>({
-    query: (id) => ({ url: `/tenant/api-keys/${id}`, method: "DELETE" }),
-    invalidatesTags: ["ApiKeys"],
-  }),
+    // ── Admin: API Keys ──────────────────────────────────────────────────
+    getApiKeys: builder.query<any[], void>({
+      query: () => "/tenant/api-keys",
+      transformResponse: (r: any) =>
+        Array.isArray(r) ? r : (r?.apiKeys ?? []),
+      providesTags: ["ApiKeys"],
+    }),
+    createApiKey: builder.mutation<
+      any,
+      {
+        userId: string;
+        name: string;
+        permissions?: string[];
+        expiresAt?: string;
+      }
+    >({
+      query: (body) => ({ url: "/tenant/api-keys", method: "POST", body }),
+      invalidatesTags: ["ApiKeys"],
+    }),
+    revokeApiKey: builder.mutation<any, string>({
+      query: (id) => ({ url: `/tenant/api-keys/${id}`, method: "DELETE" }),
+      invalidatesTags: ["ApiKeys"],
+    }),
 
-  // ── Admin: Subscription ──────────────────────────────────────────────
-  getSubscription: builder.query<any, void>({
-    query: () => "/tenant/subscription",
-    providesTags: ["Subscription"],
-  }),
-  requestSubscription: builder.mutation<
-    any,
-    {
-      planId: string;
-      billingCycle: "MONTHLY" | "YEARLY";
-      paymentMethod: string;
-      paymentReference: string;
-    }
-  >({
-    query: (body) => ({
-      url: "/tenant/subscription/requests",
-      method: "POST",
-      body,
+    // ── Admin: Subscription ──────────────────────────────────────────────
+    getSubscription: builder.query<any, void>({
+      query: () => "/tenant/subscription",
+      providesTags: ["Subscription"],
     }),
-    invalidatesTags: ["Subscription"],
-  }),
+    requestSubscription: builder.mutation<
+      any,
+      {
+        planId: string;
+        billingCycle: "MONTHLY" | "YEARLY";
+        paymentMethod: string;
+        paymentReference: string;
+      }
+    >({
+      query: (body) => ({
+        url: "/tenant/subscription/requests",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Subscription"],
+    }),
 
-  // ── Admin: Notifications ─────────────────────────────────────────────
-  getNotifications: builder.query<
-    { notifications: any[]; meta: any },
-    { page?: number; isRead?: string }
-  >({
-    query: ({ page = 1, isRead }) => ({
-      url: "/tenant/notifications",
-      params: { page, limit: 20, ...(isRead !== undefined ? { isRead } : {}) },
+    // ── Admin: Notifications ─────────────────────────────────────────────
+    getNotifications: builder.query<
+      { notifications: any[]; meta: any },
+      { page?: number; isRead?: string }
+    >({
+      query: ({ page = 1, isRead }) => ({
+        url: "/tenant/notifications",
+        params: {
+          page,
+          limit: 20,
+          ...(isRead !== undefined ? { isRead } : {}),
+        },
+      }),
+      transformResponse: (r: any) => ({
+        notifications: r?.notifications ?? [],
+        meta: r?.meta ?? { total: 0, page: 1, limit: 20, totalPages: 0 },
+      }),
+      providesTags: ["Notifications"],
     }),
-    transformResponse: (r: any) => ({
-      notifications: r?.notifications ?? [],
-      meta: r?.meta ?? { total: 0, page: 1, limit: 20, totalPages: 0 },
+    getNotificationUnreadCount: builder.query<number, void>({
+      query: () => "/tenant/notifications/unread-count",
+      transformResponse: (r: any) => r?.count ?? 0,
+      providesTags: ["Notifications"],
     }),
-    providesTags: ["Notifications"],
-  }),
-  getNotificationUnreadCount: builder.query<number, void>({
-    query: () => "/tenant/notifications/unread-count",
-    transformResponse: (r: any) => r?.count ?? 0,
-    providesTags: ["Notifications"],
-  }),
-  markNotificationRead: builder.mutation<any, string>({
-    query: (id) => ({
-      url: `/tenant/notifications/${id}/read`,
-      method: "PATCH",
+    markNotificationRead: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/tenant/notifications/${id}/read`,
+        method: "PATCH",
+      }),
+      invalidatesTags: ["Notifications"],
     }),
-    invalidatesTags: ["Notifications"],
-  }),
-  markAllNotificationsRead: builder.mutation<any, void>({
-    query: () => ({ url: "/tenant/notifications/read-all", method: "PATCH" }),
-    invalidatesTags: ["Notifications"],
-  }),
-  deleteNotification: builder.mutation<any, string>({
-    query: (id) => ({ url: `/tenant/notifications/${id}`, method: "DELETE" }),
-    invalidatesTags: ["Notifications"],
-  }),
+    markAllNotificationsRead: builder.mutation<any, void>({
+      query: () => ({ url: "/tenant/notifications/read-all", method: "PATCH" }),
+      invalidatesTags: ["Notifications"],
+    }),
+    deleteNotification: builder.mutation<any, string>({
+      query: (id) => ({ url: `/tenant/notifications/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Notifications"],
+    }),
   }),
 });
 

@@ -13,6 +13,13 @@ export interface Product {
   inventories?: { quantity: number; lot?: { number: string; expiryDate?: string | null; manufacturingDate?: string | null } | null }[];
   image?: string;
   variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number }[];
+  // Medicine / Pharmacy fields
+  genericName?: string;
+  activeIngredient?: string;
+  strength?: string;
+  dosageForm?: string;
+  manufacturer?: string;
+  registrationNumber?: string;
 }
 
 export interface CartItem extends Product {

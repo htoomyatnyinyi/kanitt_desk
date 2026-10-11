@@ -26,7 +26,7 @@ interface Props {
   onNavigate: (tab: Destination) => void;
 }
 
-const emptyProduct: Fields = { name: "", sku: "", barcode: "", categoryId: "", brandId: "", supplierId: "", costPrice: "", sellingPrice: "", initialStock: "0" };
+const emptyProduct: Fields = { name: "", sku: "", barcode: "", categoryId: "", brandId: "", supplierId: "", costPrice: "", sellingPrice: "", initialStock: "0", genericName: "", activeIngredient: "", strength: "", dosageForm: "", manufacturer: "", registrationNumber: "" };
 const formFields: Record<EntitySection, { name: string; label: string; type?: string; required?: boolean }[]> = {
   products: [],
   staff: [{ name: "name", label: "Full name", required: true }, { name: "username", label: "Username", required: true }, { name: "email", label: "Email", type: "email", required: true }, { name: "password", label: "Temporary password", type: "password", required: true }, { name: "role", label: "Role", type: "select:ADMIN,MANAGER,CASHIER,ACCOUNTANT", required: true }],
@@ -171,7 +171,7 @@ export function ManageView(props: Props) {
   const openEdit = (item: any) => {
     setEditing(item);
     const values: Fields = section === "products"
-      ? { name: item.name || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? "") }
+      ? { name: item.name || "", categoryId: item.categoryId || "", brandId: item.brandId || "", supplierId: item.supplierId || "", costPrice: String(item.costPrice ?? ""), sellingPrice: String(item.price ?? ""), genericName: item.genericName || "", activeIngredient: item.activeIngredient || "", strength: item.strength || "", dosageForm: item.dosageForm || "", manufacturer: item.manufacturer || "", registrationNumber: item.registrationNumber || "" }
       : Object.fromEntries(formFields[section as EntitySection].map(({ name }) => [name, name === "password" ? "" : String(item[name] ?? "")]));
     setFields(values);
     if (section === "products" && item.variants?.length) {
@@ -214,6 +214,13 @@ export function ManageView(props: Props) {
           if (fields.categoryId) payload.categoryId = fields.categoryId;
           if (fields.brandId) payload.brandId = fields.brandId;
           if (fields.supplierId) payload.supplierId = fields.supplierId;
+          // Medicine / Pharmacy fields
+          payload.genericName = fields.genericName?.trim() || undefined;
+          payload.activeIngredient = fields.activeIngredient?.trim() || undefined;
+          payload.strength = fields.strength?.trim() || undefined;
+          payload.dosageForm = fields.dosageForm?.trim() || undefined;
+          payload.manufacturer = fields.manufacturer?.trim() || undefined;
+          payload.registrationNumber = fields.registrationNumber?.trim() || undefined;
           if (variantInputs.length > 0) {
             payload.sellingPrice = Number(variantInputs[0].price) || 0;
             payload.costPrice = Number(variantInputs[0].costPrice) || 0;
@@ -270,6 +277,13 @@ export function ManageView(props: Props) {
           storeId: props.storeId,
           initialStock,
           variants: parsedVariants.length > 0 ? parsedVariants : undefined,
+          // Medicine / Pharmacy fields
+          genericName: fields.genericName?.trim() || undefined,
+          activeIngredient: fields.activeIngredient?.trim() || undefined,
+          strength: fields.strength?.trim() || undefined,
+          dosageForm: fields.dosageForm?.trim() || undefined,
+          manufacturer: fields.manufacturer?.trim() || undefined,
+          registrationNumber: fields.registrationNumber?.trim() || undefined,
         });
         setNotice("Product created with variants and linked to store.");
       } else {
@@ -625,7 +639,14 @@ export function ManageView(props: Props) {
             </div>
             {paginatedRows.map((item: any) => (
               <div key={item.id} className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-800/70 px-5 py-3.5 last:border-0">
-                <span className="truncate text-sm font-semibold text-slate-100">{item.name}</span>
+                <div className="min-w-0">
+                  <span className="truncate block text-sm font-semibold text-slate-100">{item.name}</span>
+                  {section === "products" && (item.genericName || item.activeIngredient || item.strength || item.dosageForm) && (
+                    <span className="block truncate text-[11px] font-medium text-emerald-400/90 mt-0.5">
+                      {[item.genericName, item.activeIngredient, item.strength, item.dosageForm].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </div>
                 <span className="truncate font-mono text-xs text-slate-400">{section === "products" ? `${item.sku || "—"} · ${item.barcode || "—"}` : section === "staff" ? item.role : item.email || item.phone || item.contactName || "—"}</span>
                 <span className="truncate text-xs text-slate-400">{section === "products" ? `${Number(item.price).toLocaleString()} MMK · ${item.stock} in stock` : item.code || (item.isActive === false ? "Inactive" : "Active")}</span>
                 <span className="text-xs text-slate-500">{item._count?.products ?? item.storeName ?? "—"}</span>
@@ -804,6 +825,40 @@ export function ManageView(props: Props) {
                         </select>
                       </label>
                     </div>
+
+                    {/* ── Medicine / Pharmacy Details ── */}
+                    <details className="group rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
+                      <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-xs font-semibold text-emerald-400 select-none hover:bg-emerald-500/10 transition-colors">
+                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        Medicine / Pharmacy Details
+                        <span className="text-[10px] text-slate-500 font-normal ml-1">(optional — expand for drug catalog fields)</span>
+                      </summary>
+                      <div className="space-y-4 px-4 pb-4 pt-2 border-t border-emerald-500/10">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <label className="block text-xs font-medium text-slate-400">Generic Name
+                            <input placeholder="e.g. Paracetamol" value={fields.genericName} onChange={(e) => setField("genericName", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none transition-all" />
+                          </label>
+                          <label className="block text-xs font-medium text-slate-400">Active Ingredient
+                            <input placeholder="e.g. Paracetamol" value={fields.activeIngredient} onChange={(e) => setField("activeIngredient", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none transition-all" />
+                          </label>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <label className="block text-xs font-medium text-slate-400">Strength
+                            <input placeholder="e.g. 500mg" value={fields.strength} onChange={(e) => setField("strength", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none transition-all" />
+                          </label>
+                          <label className="block text-xs font-medium text-slate-400">Dosage Form
+                            <input placeholder="e.g. Tablet, Syrup" value={fields.dosageForm} onChange={(e) => setField("dosageForm", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none transition-all" />
+                          </label>
+                          <label className="block text-xs font-medium text-slate-400">Registration No.
+                            <input placeholder="e.g. REG-12345" value={fields.registrationNumber} onChange={(e) => setField("registrationNumber", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none transition-all" />
+                          </label>
+                        </div>
+                        <label className="block text-xs font-medium text-slate-400">Manufacturer
+                          <input placeholder="e.g. BPI, GPO" value={fields.manufacturer} onChange={(e) => setField("manufacturer", e.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 outline-none transition-all" />
+                        </label>
+                      </div>
+                    </details>
+
                     {/* Tip card */}
                     <div className="flex items-start gap-3 rounded-xl border border-sky-500/15 bg-sky-500/5 px-4 py-3">
                       <Package className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-400" />

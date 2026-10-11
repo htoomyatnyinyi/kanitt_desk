@@ -65,7 +65,13 @@ import { BusinessToolsView } from "./components/BusinessToolsView";
 import { AdminView } from "./components/AdminView";
 import { ReportsView } from "./components/ReportsView";
 import { ReceiptModal, ReceiptData } from "./components/ReceiptModal";
-import { queueSale, readQueuedSales, removeQueuedSale, updateQueuedSaleError, type QueuedSale } from "./services/offlineSalesQueue";
+import {
+  queueSale,
+  readQueuedSales,
+  removeQueuedSale,
+  updateQueuedSaleError,
+  type QueuedSale,
+} from "./services/offlineSalesQueue";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
 function PosShell({ onLogout }: { onLogout: () => void }) {
@@ -102,8 +108,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   );
   const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-  const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() => readQueuedSales());
-  const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(null);
+  const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() =>
+    readQueuedSales(),
+  );
+  const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(
+    null,
+  );
 
   // RTK Query — live data from kanitt_server
   const {
@@ -181,11 +191,18 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         e.preventDefault();
         setActiveTab("pos");
         // Focus search input
-        const searchInput = document.querySelector<HTMLInputElement>('input[placeholder*="barcode"]');
+        const searchInput = document.querySelector<HTMLInputElement>(
+          'input[placeholder*="barcode"]',
+        );
         searchInput?.focus();
       } else if (e.key === "F2") {
         e.preventDefault();
-        if (activeTab === "pos" && cart.length > 0 && !isPricingLoading && !pricingError) {
+        if (
+          activeTab === "pos" &&
+          cart.length > 0 &&
+          !isPricingLoading &&
+          !pricingError
+        ) {
           setPaymentModalOpen(true);
         }
       } else if (e.key === "Escape") {
@@ -200,7 +217,14 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [activeTab, cart.length, isPricingLoading, pricingError, paymentModalOpen, currentReceipt]);
+  }, [
+    activeTab,
+    cart.length,
+    isPricingLoading,
+    pricingError,
+    paymentModalOpen,
+    currentReceipt,
+  ]);
   const [createCatalogProduct] = useCreateCatalogProductMutation();
   const [updateCatalogProduct] = useUpdateCatalogProductMutation();
   const [createCategory] = useCreateCategoryMutation();
@@ -236,11 +260,18 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       try {
         const result: any = await createOrderApi(sale.payload).unwrap();
         const order = result?.order ?? result?.data?.order ?? result;
-        if (order?.id && order.status === "PENDING") await completeOrderApi(order.id).unwrap();
+        if (order?.id && order.status === "PENDING")
+          await completeOrderApi(order.id).unwrap();
         setQueuedSales(removeQueuedSale(sale.id));
       } catch (error) {
-        const failure = error as { data?: { message?: string }; error?: string };
-        const message = failure.data?.message || failure.error || "Sale could not sync. Check its price and register session.";
+        const failure = error as {
+          data?: { message?: string };
+          error?: string;
+        };
+        const message =
+          failure.data?.message ||
+          failure.error ||
+          "Sale could not sync. Check its price and register session.";
         setQueuedSales(updateQueuedSaleError(sale.id, message));
         break;
       }
@@ -276,24 +307,43 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         setPromotionCode("");
         setPromotionInput("");
       }
-      return () => { stale = true; };
+      return () => {
+        stale = true;
+      };
     }
     const timer = window.setTimeout(() => {
       setOrderPricing(null);
       setPricingError(null);
       void quoteOrder({
         storeId: selectedStore.id,
-        items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        items: cart.map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+        })),
         ...(promotionCode ? { promotionCode } : {}),
-      }).unwrap().then((result) => {
-        if (!stale) setOrderPricing({ ...result.quote, quoteToken: result.quoteToken });
-      }).catch((error: unknown) => {
-        if (stale) return;
-        const value = error as { data?: { message?: string }; error?: string };
-        setPricingError(value.data?.message || value.error || "Could not calculate the current sale total.");
-      });
+      })
+        .unwrap()
+        .then((result) => {
+          if (!stale)
+            setOrderPricing({ ...result.quote, quoteToken: result.quoteToken });
+        })
+        .catch((error: unknown) => {
+          if (stale) return;
+          const value = error as {
+            data?: { message?: string };
+            error?: string;
+          };
+          setPricingError(
+            value.data?.message ||
+              value.error ||
+              "Could not calculate the current sale total.",
+          );
+        });
     }, 160);
-    return () => { stale = true; window.clearTimeout(timer); };
+    return () => {
+      stale = true;
+      window.clearTimeout(timer);
+    };
   }, [cart, selectedStore?.id, promotionCode, quoteOrder]);
 
   useEffect(() => {
@@ -389,61 +439,94 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const total = orderPricing?.grandTotal ?? subtotal;
   const changeAmount = Math.max(0, (Number(receivedAmount) || 0) - total);
 
-  const handleCheckoutSuccess = async (payments?: { method: string; amount: number }[]) => {
+  const handleCheckoutSuccess = async (
+    payments?: { method: string; amount: number }[],
+  ) => {
     if (!orderPricing || pricingError) {
-      setCheckoutError(pricingError || "Wait for the server to calculate this sale before taking payment.");
+      setCheckoutError(
+        pricingError ||
+          "Wait for the server to calculate this sale before taking payment.",
+      );
       return;
     }
     if (isConnected && selectedStore) {
       const activeSession = (apiSessions ?? []).find(
-        (session) => session.storeId === selectedStore.id && session.status === "OPEN",
+        (session) =>
+          session.storeId === selectedStore.id && session.status === "OPEN",
       );
       if (!activeSession) {
-        setCheckoutError("Open a register session for this store before completing a sale.");
+        setCheckoutError(
+          "Open a register session for this store before completing a sale.",
+        );
         return;
       }
       try {
         const payload = {
           orderNumber: checkoutOrderNumber,
           pricingToken: orderPricing.quoteToken,
-          quotedPricing: (({ quoteToken: _quoteToken, ...quote }: any) => quote)(orderPricing),
+          quotedPricing: (({ quoteToken: _quoteToken, ...quote }: any) =>
+            quote)(orderPricing),
           storeId: selectedStore.id,
           sessionId: activeSession.id,
-          items: orderPricing.items.map((item: { productId: string; variantId?: string; quantity: number; unitPrice: number; subTotal: number }) => ({
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subTotal: item.subTotal,
-          })),
+          items: orderPricing.items.map(
+            (item: {
+              productId: string;
+              variantId?: string;
+              quantity: number;
+              unitPrice: number;
+              subTotal: number;
+            }) => ({
+              productId: item.productId,
+              variantId: item.variantId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subTotal: item.subTotal,
+            }),
+          ),
           promotionCode: promotionCode || undefined,
           discountAmount: discount,
           subTotal: subtotal,
           taxAmount: tax,
           grandTotal: total,
           currencyCode: "MMK",
-          paidAmount: payments?.length ? total : paymentMethod === "cash" ? Number(receivedAmount) : total,
+          paidAmount: payments?.length
+            ? total
+            : paymentMethod === "cash"
+              ? Number(receivedAmount)
+              : total,
           changeAmount: payments?.length ? 0 : changeAmount,
-          paymentMethod: payments && payments.length > 1 ? "MIXED_PAYMENT" : (
-            {
-              cash: "CASH",
-              kpay: "KBZ_PAY",
-              wave: "WAVE_PAY",
-              card: "CARD",
-            } as const
-          )[paymentMethod],
+          paymentMethod:
+            payments && payments.length > 1
+              ? "MIXED_PAYMENT"
+              : (
+                  {
+                    cash: "CASH",
+                    kpay: "KBZ_PAY",
+                    wave: "WAVE_PAY",
+                    card: "CARD",
+                  } as const
+                )[paymentMethod],
           payments,
         };
         let result: any;
         try {
           result = await createOrderApi(payload).unwrap();
         } catch (error) {
-          const failure = error as { status?: string | number; data?: { message?: string }; error?: string };
-          const transportFailure = failure.status === "FETCH_ERROR" || failure.status === "TIMEOUT_ERROR" || (typeof failure.status === "number" && failure.status >= 500);
+          const failure = error as {
+            status?: string | number;
+            data?: { message?: string };
+            error?: string;
+          };
+          const transportFailure =
+            failure.status === "FETCH_ERROR" ||
+            failure.status === "TIMEOUT_ERROR" ||
+            (typeof failure.status === "number" && failure.status >= 500);
           if (!transportFailure) throw error;
           const updatedQueue = queueSale(payload);
           setQueuedSales(updatedQueue);
-          alert("Sale saved on this device and queued for sync. Keep this register session open until it syncs.");
+          alert(
+            "Sale saved on this device and queued for sync. Keep this register session open until it syncs.",
+          );
           setCart([]);
           setCheckoutOrderNumber(`POS-${crypto.randomUUID()}`);
           setPaymentModalOpen(false);
@@ -452,7 +535,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           return;
         }
         const order = result?.order ?? result?.data?.order ?? result;
-        if (order?.id && order.status === "PENDING") await completeOrderApi(order.id).unwrap();
+        if (order?.id && order.status === "PENDING")
+          await completeOrderApi(order.id).unwrap();
       } catch (e) {
         const apiError = e as { data?: { message?: string }; error?: string };
         setCheckoutError(
@@ -484,8 +568,11 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       taxAmount: tax,
       discountAmount: discount,
       grandTotal: total,
-      paymentMethod: payments && payments.length > 1 ? "MIXED_PAYMENT" : paymentMethod,
-      receivedAmount: payments?.length ? total : Number(receivedAmount) || total,
+      paymentMethod:
+        payments && payments.length > 1 ? "MIXED_PAYMENT" : paymentMethod,
+      receivedAmount: payments?.length
+        ? total
+        : Number(receivedAmount) || total,
       changeAmount: payments?.length ? 0 : changeAmount,
     };
     setCurrentReceipt(completedReceiptData);
@@ -553,11 +640,16 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             return createCustomer(payload).unwrap();
           }}
           onUpdateEntity={(section, id, payload) => {
-            if (section === "products") return updateCatalogProduct({ id, patch: payload }).unwrap();
-            if (section === "staff") return updateStaff({ id, patch: payload }).unwrap();
-            if (section === "brands") return updateBrand({ id, patch: payload }).unwrap();
-            if (section === "categories") return updateCategory({ id, patch: payload }).unwrap();
-            if (section === "suppliers") return updateSupplier({ id, patch: payload }).unwrap();
+            if (section === "products")
+              return updateCatalogProduct({ id, patch: payload }).unwrap();
+            if (section === "staff")
+              return updateStaff({ id, patch: payload }).unwrap();
+            if (section === "brands")
+              return updateBrand({ id, patch: payload }).unwrap();
+            if (section === "categories")
+              return updateCategory({ id, patch: payload }).unwrap();
+            if (section === "suppliers")
+              return updateSupplier({ id, patch: payload }).unwrap();
             return updateCustomer({ id, patch: payload }).unwrap();
           }}
           onAdjustStock={(productId, variantId, quantity, reason) =>
@@ -627,7 +719,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           isLoading={isOrdersLoading}
         />
       )}
-      {activeTab === "commerce" && <BusinessToolsView storeId={selectedStore?.id} />}
+      {activeTab === "commerce" && (
+        <BusinessToolsView storeId={selectedStore?.id} />
+      )}
       {activeTab === "admin" && <AdminView stores={stores} />}
       {activeTab === "sync" && (
         <SyncView
@@ -667,18 +761,46 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             promotionCode={promotionCode}
             promotionInput={promotionInput}
             setPromotionInput={setPromotionInput}
-            applyPromotion={() => { setCheckoutError(null); setPricingError(null); setOrderPricing(null); setPromotionCode(promotionInput.trim()); }}
-            pricingLoading={isPricingLoading || (!!selectedStore?.id && cart.length > 0 && !orderPricing && !pricingError)}
+            applyPromotion={() => {
+              setCheckoutError(null);
+              setPricingError(null);
+              setOrderPricing(null);
+              setPromotionCode(promotionInput.trim());
+            }}
+            pricingLoading={
+              isPricingLoading ||
+              (!!selectedStore?.id &&
+                cart.length > 0 &&
+                !orderPricing &&
+                !pricingError)
+            }
             pricingError={pricingError}
           />
         </>
       )}
 
-      {activeTab === "inventory" && <InventoryView products={products} />}
-      {activeTab === "sessions" && <SessionsView sessions={apiSessions} storeId={selectedStore?.id} storeName={selectedStore?.name} onOpen={(storeId, openingBalance) => openRegisterSession({ storeId, openingBalance }).unwrap()} onClose={(sessionId, closingBalance) => {
-        if (queuedSales.some((sale) => sale.payload.sessionId === sessionId)) throw new Error("This register has offline sales waiting to sync. Reconnect and sync them before closing the session.");
-        return closeRegisterSession({ sessionId, closingBalance }).unwrap();
-      }} />}
+      {activeTab === "inventory" && (
+        <InventoryView products={products} isLoading={isProductsLoading} />
+      )}
+      {activeTab === "sessions" && (
+        <SessionsView
+          sessions={apiSessions}
+          storeId={selectedStore?.id}
+          storeName={selectedStore?.name}
+          onOpen={(storeId, openingBalance) =>
+            openRegisterSession({ storeId, openingBalance }).unwrap()
+          }
+          onClose={(sessionId, closingBalance) => {
+            if (
+              queuedSales.some((sale) => sale.payload.sessionId === sessionId)
+            )
+              throw new Error(
+                "This register has offline sales waiting to sync. Reconnect and sync them before closing the session.",
+              );
+            return closeRegisterSession({ sessionId, closingBalance }).unwrap();
+          }}
+        />
+      )}
       {activeTab === "settings" && (
         <SettingsView connected={isConnected} storeName={selectedStore?.name} />
       )}

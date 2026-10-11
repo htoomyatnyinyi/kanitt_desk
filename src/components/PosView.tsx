@@ -93,13 +93,13 @@ export function PosView({
         </div>
 
         {/* Category Pills & Per Page selector */}
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-3 w-full sm:flex-1 sm:min-w-0">
+          <div className="flex-1 min-w-0 flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
             {categories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-3.5 py-1.5 lg:px-4 lg:py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-3.5 py-1.5 lg:px-4 lg:py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all ${
                   selectedCategory === category
                     ? "bg-slate-800 text-sky-400 border border-sky-500/40"
                     : "bg-slate-900/60 text-slate-400 border border-slate-800/60 hover:bg-slate-800"
@@ -110,7 +110,7 @@ export function PosView({
             ))}
           </div>
 
-          <label className="text-xs text-slate-400 flex items-center gap-1.5 ml-auto">
+          <label className="text-xs text-slate-400 flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
             Grid:
             <select
               value={pageSize}

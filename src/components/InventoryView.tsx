@@ -4,9 +4,10 @@ import { Product } from "../types";
 
 interface InventoryViewProps {
   products: Product[];
+  isLoading?: boolean;
 }
 
-export function InventoryView({ products }: InventoryViewProps) {
+export function InventoryView({ products, isLoading = false }: InventoryViewProps) {
   const [query, setQuery] = useState("");
   const [pageSize, setPageSize] = useState<number>(100);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -16,8 +17,8 @@ export function InventoryView({ products }: InventoryViewProps) {
     if (!normalized) return products;
     return products.filter((product) =>
       [product.name, product.sku, product.barcode, product.category]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(normalized))
+        .map((val) => (val || "").toString().toLowerCase())
+        .some((value) => value.includes(normalized))
     );
   }, [products, query]);
 
@@ -102,7 +103,14 @@ export function InventoryView({ products }: InventoryViewProps) {
                 className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors cursor-pointer"
               >
                 <td className="px-5 py-3">
-                  <span className="font-semibold text-slate-100">{product.name}</span>
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-100 block">{product.name}</span>
+                    {(product.genericName || product.activeIngredient || product.strength || product.dosageForm) && (
+                      <span className="block truncate text-[11px] font-medium text-emerald-400/90 mt-0.5">
+                        {[product.genericName, product.activeIngredient, product.strength, product.dosageForm].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-5 py-3 font-mono text-xs text-slate-400">{product.sku}</td>
                 <td className="px-5 py-3">
@@ -111,18 +119,18 @@ export function InventoryView({ products }: InventoryViewProps) {
                   </span>
                 </td>
                 <td className="px-5 py-3 text-right font-bold text-white">
-                  {product.price.toLocaleString()}{" "}
+                  {(Number(product.price) || 0).toLocaleString()}{" "}
                   <span className="text-slate-500 font-normal text-xs">MMK</span>
                 </td>
                 <td className="px-5 py-3 text-right font-bold text-white">
-                  {product.stock.toLocaleString()}
+                  {(Number(product.stock) || 0).toLocaleString()}
                   {product.inventories?.some((inventory) => inventory.lot) && (
                     <div className="mt-1 space-y-1 text-[10px] font-medium text-slate-400">
                       {product.inventories
                         .filter((inventory) => inventory.lot)
                         .map((inventory, index) => (
                           <div key={`${inventory.lot?.number}-${index}`}>
-                            Lot {inventory.lot?.number} · {inventory.quantity} {inventory.lot?.expiryDate ? `· Exp ${new Date(inventory.lot.expiryDate).toLocaleDateString()}` : ""}
+                            Lot {inventory.lot?.number} · {Number(inventory.quantity) || 0} {inventory.lot?.expiryDate ? `· Exp ${new Date(inventory.lot.expiryDate).toLocaleDateString()}` : ""}
                           </div>
                         ))}
                     </div>
@@ -131,14 +139,14 @@ export function InventoryView({ products }: InventoryViewProps) {
                 <td className="px-5 py-3 text-center">
                   <span
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                      product.stock > 20
+                      (Number(product.stock) || 0) > 20
                         ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                        : product.stock > 5
+                        : (Number(product.stock) || 0) > 5
                         ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
                         : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
                     }`}
                   >
-                    {product.stock > 20 ? "In Stock" : product.stock > 5 ? "Low" : "Critical"}
+                    {(Number(product.stock) || 0) > 20 ? "In Stock" : (Number(product.stock) || 0) > 5 ? "Low" : "Critical"}
                   </span>
                 </td>
               </tr>
@@ -146,7 +154,7 @@ export function InventoryView({ products }: InventoryViewProps) {
             {paginatedProducts.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-400">
-                  No matching products found.
+                  {isLoading ? "Loading products..." : query ? `No products matching "${query}".` : "No products found in this store."}
                 </td>
               </tr>
             )}
