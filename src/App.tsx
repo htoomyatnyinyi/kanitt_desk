@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useGetHealthQuery,
   useGetProductsQuery,
@@ -37,6 +37,7 @@ import {
   useGetSupplierPaymentsQuery,
   useCreateSupplierPaymentMutation,
   useGetStockTransfersQuery,
+  useGetTransferDestinationStoresQuery,
   useCreateStockTransferMutation,
   useCompleteStockTransferMutation,
   useGetReturnsQuery,
@@ -46,10 +47,11 @@ import {
   Store as ApiStore,
 } from "./store/apiSlice";
 import { Product, CartItem } from "./types";
+import { decodeAuthToken } from "./services/secureStorage";
 
 import { LoginScreen } from "./components/LoginScreen";
-import { Sidebar } from "./components/Sidebar";
-import { PosView } from "./components/PosView";
+import { Sidebar, canAccessTab } from "./components/Sidebar";
+import { PosView, type Variant } from "./components/PosView";
 import { CartView } from "./components/CartView";
 import { InventoryView } from "./components/InventoryView";
 import { SessionsView } from "./components/SessionsView";
@@ -62,7 +64,16 @@ import { SyncView } from "./components/SyncView";
 import { ERPView } from "./components/ERPView";
 import { ActivityLogView } from "./components/ActivityLogView";
 import { BusinessToolsView } from "./components/BusinessToolsView";
-import { queueSale, readQueuedSales, removeQueuedSale, updateQueuedSaleError, type QueuedSale } from "./services/offlineSalesQueue";
+import { AdminView } from "./components/AdminView";
+import { ReportsView } from "./components/ReportsView";
+import { ReceiptModal, ReceiptData } from "./components/ReceiptModal";
+import {
+  queueSale,
+  readQueuedSales,
+  removeQueuedSale,
+  updateQueuedSaleError,
+  type QueuedSale,
+} from "./services/offlineSalesQueue";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
 function PosShell({ onLogout }: { onLogout: () => void }) {
@@ -74,11 +85,22 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     | "sessions"
     | "manage"
     | "erp"
+    | "reports"
     | "activity"
     | "commerce"
     | "sync"
     | "settings"
+    | "admin"
   >("dashboard");
+  const authUser = decodeAuthToken();
+  const userRole = String(authUser?.role || "CASHIER").toUpperCase();
+  const userPermissions = authUser?.permissions ?? [];
+  const allowedStoreIds = userRole === "CASHIER" ? authUser?.storeIds?.slice(0, 1) ?? [] : authUser?.storeIds ?? [];
+  useEffect(() => {
+    if (!canAccessTab(activeTab, userRole, userPermissions)) {
+      setActiveTab(userRole === "ACCOUNTANT" ? "dashboard" : "pos");
+    }
+  }, [activeTab, userRole, userPermissions.join("|")]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -97,7 +119,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   );
   const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-  const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() => readQueuedSales());
+  const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() =>
+    readQueuedSales(),
+  );
+  const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(
+    null,
+  );
 
   // RTK Query — live data from kanitt_server
   const {
@@ -139,12 +166,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     data: purchaseOrders = [],
     isLoading: isPoLoading,
     refetch: refetchPurchaseOrders,
-  } = useGetPurchaseOrdersQuery();
+  } = useGetPurchaseOrdersQuery({ storeId: selectedStore?.id });
   const {
     data: expenses = [],
     isLoading: isExpensesLoading,
     refetch: refetchExpenses,
-  } = useGetExpensesQuery();
+  } = useGetExpensesQuery({ storeId: selectedStore?.id });
   const { data: expenseCategories = [], refetch: refetchExpenseCategories } =
     useGetExpenseCategoriesQuery();
   const {
@@ -157,16 +184,61 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     isLoading: isTransfersLoading,
     refetch: refetchTransfers,
   } = useGetStockTransfersQuery();
+  const { data: transferDestinationStores = [] } = useGetTransferDestinationStoresQuery(undefined, {
+    skip: !canAccessTab("erp", userRole, userPermissions),
+  });
   const {
     data: returns = [],
     isLoading: isReturnsLoading,
     refetch: refetchReturns,
-  } = useGetReturnsQuery();
+  } = useGetReturnsQuery({ storeId: selectedStore?.id });
   const [createOrderApi, { isLoading: isCheckoutLoading }] =
     useCreateOrderMutation();
   const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
   const [completeOrderApi, { isLoading: isCompletingOrder }] =
     useCompleteOrderMutation();
+
+  // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        setActiveTab("pos");
+        // Focus search input
+        const searchInput = document.querySelector<HTMLInputElement>(
+          'input[placeholder*="barcode"]',
+        );
+        searchInput?.focus();
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        if (
+          activeTab === "pos" &&
+          cart.length > 0 &&
+          !isPricingLoading &&
+          !pricingError
+        ) {
+          setPaymentModalOpen(true);
+        }
+      } else if (e.key === "Escape") {
+        if (paymentModalOpen) {
+          e.preventDefault();
+          setPaymentModalOpen(false);
+        } else if (currentReceipt) {
+          e.preventDefault();
+          setCurrentReceipt(null);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [
+    activeTab,
+    cart.length,
+    isPricingLoading,
+    pricingError,
+    paymentModalOpen,
+    currentReceipt,
+  ]);
   const [createCatalogProduct] = useCreateCatalogProductMutation();
   const [updateCatalogProduct] = useUpdateCatalogProductMutation();
   const [createCategory] = useCreateCategoryMutation();
@@ -202,11 +274,18 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       try {
         const result: any = await createOrderApi(sale.payload).unwrap();
         const order = result?.order ?? result?.data?.order ?? result;
-        if (order?.id && order.status === "PENDING") await completeOrderApi(order.id).unwrap();
+        if (order?.id && order.status === "PENDING")
+          await completeOrderApi(order.id).unwrap();
         setQueuedSales(removeQueuedSale(sale.id));
       } catch (error) {
-        const failure = error as { data?: { message?: string }; error?: string };
-        const message = failure.data?.message || failure.error || "Sale could not sync. Check its price and register session.";
+        const failure = error as {
+          data?: { message?: string };
+          error?: string;
+        };
+        const message =
+          failure.data?.message ||
+          failure.error ||
+          "Sale could not sync. Check its price and register session.";
         setQueuedSales(updateQueuedSaleError(sale.id, message));
         break;
       }
@@ -226,12 +305,19 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         typeof p.category === "object" && p.category !== null
           ? (p.category as { name: string }).name
           : (p.category as string) || "General",
-      stock: p.stock ?? 0,
+      variants: (p.variants ?? []).map((variant: any) => ({
+        ...variant,
+        stock: Number(variant.stock ?? 0),
+      })),
       barcode: p.barcode || "",
     })) as Product[];
   })();
 
-  const stores = apiStores || [];
+  const stores = useMemo(() => {
+    const available = apiStores || [];
+    if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "ACCOUNTANT") return available;
+    return available.filter((store) => allowedStoreIds.includes(store.id));
+  }, [apiStores, userRole, allowedStoreIds.join("|")]);
 
   useEffect(() => {
     let stale = false;
@@ -242,28 +328,51 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         setPromotionCode("");
         setPromotionInput("");
       }
-      return () => { stale = true; };
+      return () => {
+        stale = true;
+      };
     }
     const timer = window.setTimeout(() => {
       setOrderPricing(null);
       setPricingError(null);
       void quoteOrder({
-        items: cart.map((item) => ({ productId: item.id, quantity: item.quantity })),
+        storeId: selectedStore.id,
+        items: cart.map((item) => ({
+          productId: item.productId || item.id,
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
         ...(promotionCode ? { promotionCode } : {}),
-      }).unwrap().then((result) => {
-        if (!stale) setOrderPricing({ ...result.quote, quoteToken: result.quoteToken });
-      }).catch((error: unknown) => {
-        if (stale) return;
-        const value = error as { data?: { message?: string }; error?: string };
-        setPricingError(value.data?.message || value.error || "Could not calculate the current sale total.");
-      });
+      })
+        .unwrap()
+        .then((result) => {
+          if (!stale)
+            setOrderPricing({ ...result.quote, quoteToken: result.quoteToken });
+        })
+        .catch((error: unknown) => {
+          if (stale) return;
+          const value = error as {
+            data?: { message?: string };
+            error?: string;
+          };
+          setPricingError(
+            value.data?.message ||
+              value.error ||
+              "Could not calculate the current sale total.",
+          );
+        });
     }, 160);
-    return () => { stale = true; window.clearTimeout(timer); };
+    return () => {
+      stale = true;
+      window.clearTimeout(timer);
+    };
   }, [cart, selectedStore?.id, promotionCode, quoteOrder]);
 
   useEffect(() => {
     if (stores.length > 0 && !selectedStore) {
       setSelectedStore(stores[0]);
+    } else if (selectedStore && !stores.some((store) => store.id === selectedStore.id)) {
+      setSelectedStore(stores[0] ?? null);
     }
   }, [stores, selectedStore]);
 
@@ -297,17 +406,31 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   ];
   const categories = liveCategories;
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, variant?: Variant) => {
+    if (!variant) return;
+    const cartProduct: CartItem = {
+      ...product,
+      id: `${product.id}::variant::${variant.id}`,
+      productId: product.id,
+      variantId: variant.id,
+      name: `${product.name} · ${variant.name}`,
+      sku: variant.sku || product.sku,
+      barcode: variant.barcode || product.barcode,
+      price: Number(variant.price ?? product.price ?? 0),
+      costPrice: variant.costPrice ?? product.costPrice,
+      stock: Number(variant.stock ?? 0),
+      variants: [variant],
+    };
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find((item) => item.id === cartProduct.id);
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id
+          item.id === cartProduct.id
             ? { ...item, quantity: item.quantity + 1 }
             : item,
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...cartProduct, quantity: 1 }];
     });
   };
 
@@ -332,11 +455,15 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
 
   const filteredProducts = products.filter((product) => {
     const matchesCategory =
-      selectedCategory === "All" || product.category === selectedCategory;
+      !selectedCategory ||
+      selectedCategory === "All" ||
+      product.category === selectedCategory;
+    const q = searchQuery.trim().toLowerCase();
     const matchesSearch =
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.barcode.includes(searchQuery) ||
-      product.sku.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      (product.name || "").toLowerCase().includes(q) ||
+      (product.barcode || "").toLowerCase().includes(q) ||
+      (product.sku || "").toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 
@@ -350,59 +477,94 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const total = orderPricing?.grandTotal ?? subtotal;
   const changeAmount = Math.max(0, (Number(receivedAmount) || 0) - total);
 
-  const handleCheckoutSuccess = async () => {
+  const handleCheckoutSuccess = async (
+    payments?: { method: string; amount: number }[],
+  ) => {
     if (!orderPricing || pricingError) {
-      setCheckoutError(pricingError || "Wait for the server to calculate this sale before taking payment.");
+      setCheckoutError(
+        pricingError ||
+          "Wait for the server to calculate this sale before taking payment.",
+      );
       return;
     }
     if (isConnected && selectedStore) {
       const activeSession = (apiSessions ?? []).find(
-        (session) => session.storeId === selectedStore.id && session.status === "OPEN",
+        (session) =>
+          session.storeId === selectedStore.id && session.status === "OPEN",
       );
       if (!activeSession) {
-        setCheckoutError("Open a register session for this store before completing a sale.");
+        setCheckoutError(
+          "Open a register session for this store before completing a sale.",
+        );
         return;
       }
       try {
         const payload = {
           orderNumber: checkoutOrderNumber,
           pricingToken: orderPricing.quoteToken,
+          quotedPricing: (({ quoteToken: _quoteToken, ...quote }: any) =>
+            quote)(orderPricing),
           storeId: selectedStore.id,
           sessionId: activeSession.id,
-          items: orderPricing.items.map((item: { productId: string; variantId?: string; quantity: number; unitPrice: number; subTotal: number }) => ({
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subTotal: item.subTotal,
-          })),
+          items: orderPricing.items.map(
+            (item: {
+              productId: string;
+              variantId?: string;
+              quantity: number;
+              unitPrice: number;
+              subTotal: number;
+            }) => ({
+              productId: item.productId,
+              variantId: item.variantId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subTotal: item.subTotal,
+            }),
+          ),
           promotionCode: promotionCode || undefined,
           discountAmount: discount,
           subTotal: subtotal,
           taxAmount: tax,
           grandTotal: total,
           currencyCode: "MMK",
-          paidAmount: paymentMethod === "cash" ? Number(receivedAmount) : total,
-          changeAmount: changeAmount,
-          paymentMethod: (
-            {
-              cash: "CASH",
-              kpay: "KBZ_PAY",
-              wave: "WAVE_PAY",
-              card: "CARD",
-            } as const
-          )[paymentMethod],
+          paidAmount: payments?.length
+            ? total
+            : paymentMethod === "cash"
+              ? Number(receivedAmount)
+              : total,
+          changeAmount: payments?.length ? 0 : changeAmount,
+          paymentMethod:
+            payments && payments.length > 1
+              ? "MIXED_PAYMENT"
+              : (
+                  {
+                    cash: "CASH",
+                    kpay: "KBZ_PAY",
+                    wave: "WAVE_PAY",
+                    card: "CARD",
+                  } as const
+                )[paymentMethod],
+          payments,
         };
         let result: any;
         try {
           result = await createOrderApi(payload).unwrap();
         } catch (error) {
-          const failure = error as { status?: string | number; data?: { message?: string }; error?: string };
-          const transportFailure = failure.status === "FETCH_ERROR" || failure.status === "TIMEOUT_ERROR" || (typeof failure.status === "number" && failure.status >= 500);
+          const failure = error as {
+            status?: string | number;
+            data?: { message?: string };
+            error?: string;
+          };
+          const transportFailure =
+            failure.status === "FETCH_ERROR" ||
+            failure.status === "TIMEOUT_ERROR" ||
+            (typeof failure.status === "number" && failure.status >= 500);
           if (!transportFailure) throw error;
           const updatedQueue = queueSale(payload);
           setQueuedSales(updatedQueue);
-          alert("Sale saved on this device and queued for sync. Keep this register session open until it syncs.");
+          alert(
+            "Sale saved on this device and queued for sync. Keep this register session open until it syncs.",
+          );
           setCart([]);
           setCheckoutOrderNumber(`POS-${crypto.randomUUID()}`);
           setPaymentModalOpen(false);
@@ -411,7 +573,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           return;
         }
         const order = result?.order ?? result?.data?.order ?? result;
-        if (order?.id && order.status === "PENDING") await completeOrderApi(order.id).unwrap();
+        if (order?.id && order.status === "PENDING")
+          await completeOrderApi(order.id).unwrap();
       } catch (e) {
         const apiError = e as { data?: { message?: string }; error?: string };
         setCheckoutError(
@@ -429,7 +592,28 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       );
       return;
     }
-    alert(`Order completed! Change: ${changeAmount.toLocaleString()} MMK`);
+    const completedReceiptData: ReceiptData = {
+      orderNumber: checkoutOrderNumber,
+      createdAt: new Date().toISOString(),
+      storeName: selectedStore?.name,
+      items: cart.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.price,
+        subTotal: item.price * item.quantity,
+      })),
+      subTotal: subtotal,
+      taxAmount: tax,
+      discountAmount: discount,
+      grandTotal: total,
+      paymentMethod:
+        payments && payments.length > 1 ? "MIXED_PAYMENT" : paymentMethod,
+      receivedAmount: payments?.length
+        ? total
+        : Number(receivedAmount) || total,
+      changeAmount: payments?.length ? 0 : changeAmount,
+    };
+    setCurrentReceipt(completedReceiptData);
     setCart([]);
     setPromotionCode("");
     setPromotionInput("");
@@ -441,7 +625,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+    <div className="flex h-screen h-dvh min-h-0 w-full min-w-0 bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -475,6 +659,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           suppliers={suppliers}
           customers={customers}
           staff={staff}
+          userRole={userRole}
           storeId={selectedStore?.id}
           stores={stores}
           loading={isProductsLoading}
@@ -494,11 +679,16 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             return createCustomer(payload).unwrap();
           }}
           onUpdateEntity={(section, id, payload) => {
-            if (section === "products") return updateCatalogProduct({ id, patch: payload }).unwrap();
-            if (section === "staff") return updateStaff({ id, patch: payload }).unwrap();
-            if (section === "brands") return updateBrand({ id, patch: payload }).unwrap();
-            if (section === "categories") return updateCategory({ id, patch: payload }).unwrap();
-            if (section === "suppliers") return updateSupplier({ id, patch: payload }).unwrap();
+            if (section === "products")
+              return updateCatalogProduct({ id, patch: payload }).unwrap();
+            if (section === "staff")
+              return updateStaff({ id, patch: payload }).unwrap();
+            if (section === "brands")
+              return updateBrand({ id, patch: payload }).unwrap();
+            if (section === "categories")
+              return updateCategory({ id, patch: payload }).unwrap();
+            if (section === "suppliers")
+              return updateSupplier({ id, patch: payload }).unwrap();
             return updateCustomer({ id, patch: payload }).unwrap();
           }}
           onAdjustStock={(productId, variantId, quantity, reason) =>
@@ -519,7 +709,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       {activeTab === "erp" && (
         <ERPView
           selectedStoreId={selectedStore?.id}
+          userRole={userRole}
           stores={stores}
+          transferDestinationStores={transferDestinationStores}
           products={products}
           suppliers={suppliers}
           orders={apiOrders}
@@ -542,8 +734,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           onUpdatePurchaseOrder={(id, patch) =>
             updatePurchaseOrder({ id, patch }).unwrap()
           }
-          onReceivePurchaseOrder={(id, storeId) =>
-            receivePurchaseOrder({ id, storeId }).unwrap()
+          onReceivePurchaseOrder={(id, storeId, lots) =>
+            receivePurchaseOrder({ id, storeId, lots }).unwrap()
           }
           onCreateExpense={(payload) => createExpense(payload).unwrap()}
           onCreateExpenseCategory={(name) =>
@@ -558,7 +750,20 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {activeTab === "activity" && <ActivityLogView />}
-      {activeTab === "commerce" && <BusinessToolsView storeId={selectedStore?.id} />}
+      {activeTab === "reports" && (
+        <ReportsView
+          orders={apiOrders}
+          products={products}
+          expenses={expenses}
+          returns={returns}
+          purchaseOrders={purchaseOrders}
+          isLoading={isOrdersLoading}
+        />
+      )}
+      {activeTab === "commerce" && (
+        <BusinessToolsView storeId={selectedStore?.id} />
+      )}
+      {activeTab === "admin" && <AdminView stores={stores} />}
       {activeTab === "sync" && (
         <SyncView
           connected={isConnected}
@@ -566,20 +771,24 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           lastSync={lastSync}
           onSync={syncWithServer}
           queuedSales={queuedSales}
+          onDiscardSale={(id) => setQueuedSales(removeQueuedSale(id))}
         />
       )}
 
       {activeTab === "pos" && (
-        <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-          <PosView
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            selectedCategory={selectedCategory}
-            setSelectedCategory={setSelectedCategory}
-            categories={categories}
-            filteredProducts={filteredProducts}
-            addToCart={addToCart}
-          />
+        <>
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+            <PosView
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+              categories={categories}
+              filteredProducts={filteredProducts}
+              allProducts={products}
+              addToCart={addToCart}
+            />
+          </main>
           <CartView
             cart={cart}
             updateQuantity={updateQuantity}
@@ -593,18 +802,64 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
             promotionCode={promotionCode}
             promotionInput={promotionInput}
             setPromotionInput={setPromotionInput}
-            applyPromotion={() => { setCheckoutError(null); setPricingError(null); setOrderPricing(null); setPromotionCode(promotionInput.trim()); }}
-            pricingLoading={isPricingLoading || (!!selectedStore?.id && cart.length > 0 && !orderPricing && !pricingError)}
+            applyPromotion={() => {
+              setCheckoutError(null);
+              setPricingError(null);
+              setOrderPricing(null);
+              setPromotionCode(promotionInput.trim());
+            }}
+            pricingLoading={
+              isPricingLoading ||
+              (!!selectedStore?.id &&
+                cart.length > 0 &&
+                !orderPricing &&
+                !pricingError)
+            }
             pricingError={pricingError}
           />
-        </main>
+        </>
       )}
 
-      {activeTab === "inventory" && <InventoryView products={products} />}
-      {activeTab === "sessions" && <SessionsView sessions={apiSessions} storeId={selectedStore?.id} storeName={selectedStore?.name} onOpen={(storeId, openingBalance) => openRegisterSession({ storeId, openingBalance }).unwrap()} onClose={(sessionId, closingBalance) => {
-        if (queuedSales.some((sale) => sale.payload.sessionId === sessionId)) throw new Error("This register has offline sales waiting to sync. Reconnect and sync them before closing the session.");
-        return closeRegisterSession({ sessionId, closingBalance }).unwrap();
-      }} />}
+      {activeTab === "inventory" && (
+        <InventoryView
+          products={products.flatMap((product) =>
+            (product.variants ?? []).map((variant) => ({
+              ...product,
+              id: `${product.id}:${variant.id}`,
+              name: `${product.name} · ${variant.name}`,
+              sku: variant.sku || product.sku,
+              price: variant.price,
+              costPrice: variant.costPrice ?? product.costPrice,
+              stock: variant.stock ?? 0,
+              variants: [variant],
+              inventories: product.inventories?.filter(
+                (inventory: any) => inventory.variantId === variant.id,
+              ),
+            })),
+          )}
+          isLoading={isProductsLoading}
+        />
+      )}
+      {activeTab === "sessions" && (
+        <SessionsView
+          sessions={apiSessions}
+          orders={apiOrders}
+          storeId={selectedStore?.id}
+          storeName={selectedStore?.name}
+          onOpen={(storeId, openingBalance) =>
+            openRegisterSession({ storeId, openingBalance }).unwrap()
+          }
+          onClose={(sessionId, closingBalance) => {
+            if (
+              queuedSales.some((sale) => sale.payload.sessionId === sessionId)
+            )
+              throw new Error(
+                "This register has offline sales waiting to sync. Reconnect and sync them before closing the session.",
+              );
+            return closeRegisterSession({ sessionId, closingBalance }).unwrap();
+          }}
+        />
+      )}
       {activeTab === "settings" && (
         <SettingsView connected={isConnected} storeName={selectedStore?.name} />
       )}
@@ -623,9 +878,16 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         error={checkoutError}
         onDismissError={() => setCheckoutError(null)}
       />
+
+      <ReceiptModal
+        receipt={currentReceipt}
+        onClose={() => setCurrentReceipt(null)}
+      />
     </div>
   );
 }
+
+import { getAuthToken, removeAuthToken } from "./services/secureStorage";
 
 // ── Root App — auth gate only, no other hooks ──────────────────────────────
 export default function App() {
@@ -633,12 +895,18 @@ export default function App() {
     localStorage.getItem("kanitt_token"),
   );
 
+  useEffect(() => {
+    void getAuthToken().then((t) => {
+      if (t && t !== token) setToken(t);
+    });
+  }, []);
+
   const handleLoginSuccess = (newToken: string) => {
     setToken(newToken);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("kanitt_token");
+    void removeAuthToken();
     setToken(null);
   };
 

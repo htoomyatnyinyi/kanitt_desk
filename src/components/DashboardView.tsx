@@ -9,7 +9,15 @@ export function DashboardView({ orders, products, loading, onOpenOrders, onOpenI
   const todayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === today.toDateString());
   const paidOrders = todayOrders.filter((order) => order.status === "COMPLETED" || order.paymentStatus === "PAID");
   const revenue = paidOrders.reduce((total, order) => total + order.grandTotal, 0);
-  const lowStock = products.filter((product) => product.stock <= 5);
+  const lowStock = products.flatMap((product) =>
+    (product.variants ?? [])
+      .filter((variant) => Number(variant.stock ?? 0) <= 5)
+      .map((variant) => ({
+        id: variant.id,
+        name: `${product.name} · ${variant.name}`,
+        stock: Number(variant.stock ?? 0),
+      })),
+  );
   const week = Array.from({ length: 7 }, (_, index) => {
     const day = new Date(); day.setDate(day.getDate() - 6 + index);
     const dayOrders = orders.filter((order) => new Date(order.createdAt).toDateString() === day.toDateString() && (order.status === "COMPLETED" || order.paymentStatus === "PAID"));

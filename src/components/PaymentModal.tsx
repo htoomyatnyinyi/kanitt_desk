@@ -1,4 +1,5 @@
 import { X, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface PaymentModalProps {
   paymentModalOpen: boolean;
@@ -9,7 +10,7 @@ interface PaymentModalProps {
   receivedAmount: string;
   setReceivedAmount: (amount: string) => void;
   changeAmount: number;
-  handleCheckoutSuccess: () => void;
+  handleCheckoutSuccess: (payments?: { method: string; amount: number }[]) => void;
   isLoading: boolean;
   error: string | null;
   onDismissError: () => void;
@@ -29,6 +30,16 @@ export function PaymentModal({
   error,
   onDismissError,
 }: PaymentModalProps) {
+  const [split, setSplit] = useState(false);
+  const [firstPaymentAmount, setFirstPaymentAmount] = useState("");
+  const [secondMethod, setSecondMethod] = useState<"cash" | "kpay" | "wave" | "card">("wave");
+  useEffect(() => setFirstPaymentAmount(String(Math.floor(total / 2))), [total]);
+  const firstAmount = Number(firstPaymentAmount) || 0;
+  const remainingAmount = Math.max(0, total - firstAmount);
+  const toPaymentMethod = (method: string) => ({ cash: "CASH", kpay: "KBZ_PAY", wave: "WAVE_PAY", card: "CARD" })[method] || "CASH";
+  useEffect(() => {
+    if (secondMethod === paymentMethod) setSecondMethod((["cash", "kpay", "wave", "card"] as const).find((method) => method !== paymentMethod) || "wave");
+  }, [paymentMethod, secondMethod]);
   if (!paymentModalOpen) return null;
 
   return (
@@ -50,6 +61,23 @@ export function PaymentModal({
             <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Total Payable</span>
             <h2 className="text-3xl font-black text-sky-400 mt-1">{total.toLocaleString()} MMK</h2>
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} className="accent-sky-500" />
+            Split payment across two methods
+          </label>
+          {split && <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950 p-3">
+            <label className="text-xs text-slate-400">First amount (MMK)
+              <input type="number" min="0.01" max={total} step="0.01" value={firstPaymentAmount} onChange={(event) => setFirstPaymentAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+              <span className="mt-1 block text-[10px]">{paymentMethod.toUpperCase()}</span>
+            </label>
+            <label className="text-xs text-slate-400">Remaining ({remainingAmount.toLocaleString()} MMK)
+              <select value={secondMethod} onChange={(event) => setSecondMethod(event.target.value as typeof secondMethod)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+                {(["cash", "kpay", "wave", "card"] as const).filter((method) => method !== paymentMethod).map((method) => <option key={method} value={method}>{method.toUpperCase()}</option>)}
+              </select>
+              <span className="mt-1 block text-[10px]">Applied automatically</span>
+            </label>
+          </div>}
 
           {/* Payment Methods */}
           <div>
@@ -98,8 +126,11 @@ export function PaymentModal({
           )}
 
           <button
-            onClick={handleCheckoutSuccess}
-            disabled={isLoading || (paymentMethod === "cash" && Number(receivedAmount) < total)}
+            onClick={() => handleCheckoutSuccess(split ? [
+              { method: toPaymentMethod(paymentMethod), amount: Math.round(firstAmount * 100) / 100 },
+              { method: toPaymentMethod(secondMethod), amount: Math.round(remainingAmount * 100) / 100 },
+            ] : [{ method: toPaymentMethod(paymentMethod), amount: total }])}
+            disabled={isLoading || (split ? firstAmount <= 0 || remainingAmount <= 0 || secondMethod === paymentMethod : paymentMethod === "cash" && Number(receivedAmount) < total)}
             className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}

@@ -8,12 +8,22 @@ export interface Product {
   costPrice?: number;
   price: number;
   sku: string;
-  stock: number;
+  stock?: number;
   barcode: string;
+  inventories?: { quantity: number; lot?: { number: string; expiryDate?: string | null; manufacturingDate?: string | null } | null }[];
   image?: string;
-  variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number }[];
+  variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number; stock?: number }[];
+  // Medicine / Pharmacy fields
+  genericName?: string;
+  activeIngredient?: string;
+  strength?: string;
+  dosageForm?: string;
+  manufacturer?: string;
+  registrationNumber?: string;
 }
 
 export interface CartItem extends Product {
   quantity: number;
+  productId?: string;
+  variantId?: string;
 }

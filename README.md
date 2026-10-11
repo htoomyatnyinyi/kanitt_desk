@@ -1,4 +1,4 @@
-# KANITT POS Desktop
+# KANITT
 
 KANITT POS is the desktop client for `kanitt_server`. Tauri packages the existing React UI for Windows, macOS and Linux; the API and database remain hosted by `kanitt_server`.
 

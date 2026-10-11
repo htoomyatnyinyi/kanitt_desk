@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Eye, EyeOff, Store, Loader2, AlertCircle } from "lucide-react";
 import { useLoginMutation } from "../store/apiSlice";
 
+import { setAuthToken } from "../services/secureStorage";
+
 interface LoginScreenProps {
   onLoginSuccess: (token: string) => void;
 }
@@ -28,7 +30,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       }).unwrap();
 
       if (result.token) {
-        localStorage.setItem("kanitt_token", result.token);
+        await setAuthToken(result.token);
         onLoginSuccess(result.token);
       }
     } catch (err: any) {
