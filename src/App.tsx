@@ -46,9 +46,10 @@ import {
   Store as ApiStore,
 } from "./store/apiSlice";
 import { Product, CartItem } from "./types";
+import { decodeAuthToken } from "./services/secureStorage";
 
 import { LoginScreen } from "./components/LoginScreen";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar, canAccessTab } from "./components/Sidebar";
 import { PosView } from "./components/PosView";
 import { CartView } from "./components/CartView";
 import { InventoryView } from "./components/InventoryView";
@@ -90,6 +91,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     | "settings"
     | "admin"
   >("dashboard");
+  const authUser = decodeAuthToken();
+  const userRole = String(authUser?.role || "CASHIER").toUpperCase();
+  const userPermissions = authUser?.permissions ?? [];
+  useEffect(() => {
+    if (!canAccessTab(activeTab, userRole, userPermissions)) setActiveTab("pos");
+  }, [activeTab, userRole, userPermissions.join("|")]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);

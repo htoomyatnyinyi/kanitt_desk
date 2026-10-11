@@ -33,6 +33,7 @@ export interface AuthUser {
   email?: string;
   role?: string;
   tenantId?: string;
+  permissions?: string[];
 }
 
 export function decodeAuthToken(token?: string | null): AuthUser | null {
@@ -47,6 +48,7 @@ export function decodeAuthToken(token?: string | null): AuthUser | null {
       email: payload.email,
       role: payload.role,
       tenantId: payload.tenantId,
+      permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
     };
   } catch {
     return null;

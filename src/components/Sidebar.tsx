@@ -24,7 +24,7 @@ import {
 import { Store as ApiStore } from "../store/apiSlice";
 import { decodeAuthToken } from "../services/secureStorage";
 
-type Tab =
+export type Tab =
   | "dashboard"
   | "pos"
   | "orders"
@@ -38,6 +38,24 @@ type Tab =
   | "sync"
   | "settings"
   | "admin";
+export function canAccessTab(tab: Tab, role: string, permissions: string[] = []) {
+  const roleAllowed: Partial<Record<Tab, string[]>> = {
+    dashboard: ["ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT", "SUPER_ADMIN"],
+    erp: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+    commerce: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+    settings: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+    admin: ["ADMIN", "SUPER_ADMIN"],
+  };
+  const permissionAllowed: Partial<Record<Tab, string[]>> = {
+    dashboard: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
+    reports: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
+    manage: ["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES"],
+    activity: ["VIEW_AUDIT_LOGS"],
+  };
+  if (permissionAllowed[tab]) return permissions.some((permission) => permissionAllowed[tab]!.includes(permission));
+  if (roleAllowed[tab]) return roleAllowed[tab]!.includes(role);
+  return true;
+}
 interface SidebarProps {
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
@@ -53,12 +71,12 @@ interface SidebarProps {
 
 const groups: {
   name: string;
-  items: { id: Tab; label: string; icon: LucideIcon; roles?: string[] }[];
+  items: { id: Tab; label: string; icon: LucideIcon; roles?: string[]; permissions?: string[] }[];
 }[] = [
   {
     name: "Workspace",
     items: [
-      { id: "dashboard", label: "Overview", icon: LayoutDashboard },
+      { id: "dashboard", label: "Overview", icon: LayoutDashboard, permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"] },
       { id: "pos", label: "Point of sale", icon: ShoppingBag },
     ],
   },
@@ -73,20 +91,22 @@ const groups: {
   {
     name: "Operations",
     items: [
-      { id: "reports", label: "Reports & analytics", icon: BarChart3 },
-      { id: "erp", label: "ERP operations", icon: BriefcaseBusiness },
-      { id: "commerce", label: "Pricing & finance", icon: BadgePercent },
+      { id: "reports", label: "Reports & analytics", icon: BarChart3, permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"] },
+      { id: "erp", label: "ERP operations", icon: BriefcaseBusiness, roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
+      { id: "commerce", label: "Pricing & finance", icon: BadgePercent, roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
       {
         id: "manage",
         label: "Catalog & people",
         icon: Users,
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+        permissions: ["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES"],
       },
       {
         id: "activity",
         label: "Audit trail",
         icon: ClipboardList,
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+        permissions: ["VIEW_AUDIT_LOGS"],
       },
     ],
   },
@@ -100,7 +120,7 @@ const groups: {
         roles: ["ADMIN", "SUPER_ADMIN"],
       },
       { id: "sync", label: "Sync status", icon: Cloud },
-      { id: "settings", label: "Settings", icon: Settings2 },
+      { id: "settings", label: "Settings", icon: Settings2, roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
     ],
   },
 ];
@@ -257,9 +277,8 @@ export function Sidebar({
         aria-label="Main navigation"
       >
         {groups.map((group) => {
-          const visibleItems = group.items.filter(
-            (item) => !item.roles || item.roles.includes(userRole),
-          );
+          const userPermissions = currentUser?.permissions ?? [];
+          const visibleItems = group.items.filter((item) => canAccessTab(item.id, userRole, userPermissions));
           if (visibleItems.length === 0) return null;
           return (
             <div key={group.name}>
