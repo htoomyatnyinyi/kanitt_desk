@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Search, Plus, Barcode } from "lucide-react";
 import { Product } from "../types";
 
