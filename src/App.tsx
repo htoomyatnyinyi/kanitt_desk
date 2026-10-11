@@ -51,7 +51,7 @@ import { decodeAuthToken } from "./services/secureStorage";
 
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar, canAccessTab } from "./components/Sidebar";
-import { PosView } from "./components/PosView";
+import { PosView, type Variant } from "./components/PosView";
 import { CartView } from "./components/CartView";
 import { InventoryView } from "./components/InventoryView";
 import { SessionsView } from "./components/SessionsView";
@@ -338,7 +338,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       void quoteOrder({
         storeId: selectedStore.id,
         items: cart.map((item) => ({
-          productId: item.id,
+          productId: item.productId || item.id,
+          variantId: item.variantId,
           quantity: item.quantity,
         })),
         ...(promotionCode ? { promotionCode } : {}),
@@ -405,17 +406,31 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   ];
   const categories = liveCategories;
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, variant?: Variant) => {
+    if (!variant) return;
+    const cartProduct: CartItem = {
+      ...product,
+      id: `${product.id}::variant::${variant.id}`,
+      productId: product.id,
+      variantId: variant.id,
+      name: `${product.name} · ${variant.name}`,
+      sku: variant.sku || product.sku,
+      barcode: variant.barcode || product.barcode,
+      price: Number(variant.price ?? product.price ?? 0),
+      costPrice: variant.costPrice ?? product.costPrice,
+      stock: Number(variant.stock ?? 0),
+      variants: [variant],
+    };
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      const existing = prev.find((item) => item.id === cartProduct.id);
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id
+          item.id === cartProduct.id
             ? { ...item, quantity: item.quantity + 1 }
             : item,
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...cartProduct, quantity: 1 }];
     });
   };
 
