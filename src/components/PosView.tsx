@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { Search, Plus, Barcode, X, Layers, Package } from "lucide-react";
+import { Search, Plus, Barcode, X, Layers } from "lucide-react";
 import { Product } from "../types";
 
 /* ------------------------------------------------------------------ */
@@ -123,7 +123,7 @@ export function PosView({
 
   /**
    * Decides what to do when a product is chosen:
-   *  - no variants  → add directly
+   *  - no variants  → unavailable until a sellable option is configured
    *  - one variant  → add that variant directly (skip the picker)
    *  - many variants → open the picker
    */
@@ -132,7 +132,6 @@ export function PosView({
       const variants = getVariants(product);
 
       if (variants.length === 0) {
-        addToCart(product);
         return;
       }
       if (variants.length === 1) {
@@ -253,13 +252,12 @@ export function PosView({
         {paginatedProducts.map((product) => {
           const variants = getVariants(product);
           const variantCount = variants.length;
-          const totalStock = Number(product.stock) || 0;
 
           return (
             <div
               key={product.id}
-              onClick={() => handleProductClick(product)}
-              className="group bg-slate-900/70 hover:bg-slate-900 border border-slate-800/80 hover:border-sky-500/50 rounded-2xl p-4 flex flex-col justify-between cursor-pointer transition-all duration-200 hover:shadow-xl hover:shadow-sky-500/5 active:scale-[0.98]"
+              onClick={() => variants.length > 0 && handleProductClick(product)}
+              className={`group bg-slate-900/70 hover:bg-slate-900 border border-slate-800/80 hover:border-sky-500/50 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:shadow-sky-500/5 ${variantCount > 0 ? "cursor-pointer active:scale-[0.98]" : "opacity-50"}`}
             >
               <div>
                 <div className="flex justify-between items-start gap-2 mb-2">
@@ -274,7 +272,7 @@ export function PosView({
                     </span>
                   ) : (
                     <span className="text-[10px] font-medium text-slate-500 shrink-0">
-                      Stock: {totalStock}
+                      No sellable options
                     </span>
                   )}
                 </div>
@@ -294,8 +292,7 @@ export function PosView({
 
                 {variantCount > 0 && (
                   <p className="mt-1.5 text-[10px] font-medium text-slate-500">
-                    {variantCount} variant{variantCount === 1 ? "" : "s"} ·{" "}
-                    {totalStock} in total
+                    {variantCount} sellable option{variantCount === 1 ? "" : "s"}
                   </p>
                 )}
               </div>

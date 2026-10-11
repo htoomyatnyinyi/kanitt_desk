@@ -507,12 +507,13 @@ export function ManageView(props: Props) {
         const quantity = Number(stockFields.quantity);
         if (
           !stockFields.productId ||
+          !stockFields.variantId ||
           !Number.isInteger(quantity) ||
           quantity < 1 ||
           !stockFields.reason.trim()
         )
           throw new Error(
-            "Choose a product, enter a positive whole quantity, and add a reason.",
+            "Choose a product option, enter a positive whole quantity, and add a reason.",
           );
         await props.onAdjustStock(
           stockFields.productId,
@@ -612,14 +613,9 @@ export function ManageView(props: Props) {
             bestBeforeDate: v.bestBeforeDate || undefined,
           }));
 
-        const totalVariantStock = parsedVariants.reduce(
-          (sum, v) => sum + (v.initialStock || 0),
-          0,
-        );
         if (!parsedVariants.length)
           throw new Error("Add at least one named sellable option.");
         const primaryVariant = parsedVariants[0];
-        const initialStock = totalVariantStock;
 
         await props.onCreateProduct({
           name: fields.name.trim(),
@@ -631,7 +627,6 @@ export function ManageView(props: Props) {
           costPrice: primaryVariant.costPrice || 0,
           sellingPrice: primaryVariant.price,
           storeId: props.storeId,
-          initialStock,
           variants: parsedVariants.length > 0 ? parsedVariants : undefined,
           // Medicine / Pharmacy fields
           genericName: fields.genericName?.trim() || undefined,
@@ -696,12 +691,14 @@ export function ManageView(props: Props) {
 
   const downloadExcelTemplate = () => {
     const headers =
-      "Product Name,Category Name,Brand Name,Supplier Name,Generic Name,Active Ingredient,Strength,Dosage Form,Manufacturer,Registration Number,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Initial Stock,Wholesale Price,Min Wholesale Qty,Color,Size,Mfg Date,Expiry Date,Best Before Date\n";
+      "Product Name,Product SKU,Product Barcode,Category Name,Brand Name,Supplier Name,Generic Name,Active Ingredient,Strength,Dosage Form,Manufacturer,Registration Number,Variant Name,Variant SKU,Variant Barcode,Selling Price,Cost Price,Variant Initial Stock,Wholesale Price,Min Wholesale Qty,Color,Size,Mfg Date,Expiry Date,Best Before Date\n";
     const exampleRow1 =
-      "Sample T-Shirt,Apparel,Nike,Main Supplier,,,,,,,Red / M,TS-1001-RED-M,885000100101,7500,5000,50,7000,10,Red,M,2026-01-01,,\n";
+      "Sample T-Shirt,TSHIRT-001,,Apparel,Nike,Main Supplier,,,,,,,Red / M,TS-1001-RED-M,885000100101,7500,5000,25,7000,10,Red,M,2026-01-01,,\n";
     const exampleRow2 =
-      "Paracetamol 500mg,Medicine,,Pharma Supply,Paracetamol,Paracetamol,500mg,Tablet,BPI,REG-12345,Box (100s),PCM-500-BOX,885000200201,12000,9000,20,11000,5,,,2025-06-01,2028-06-01,\n";
-    const blob = new Blob(["\uFEFF", headers, exampleRow1, exampleRow2], {
+      "Sample T-Shirt,TSHIRT-001,,Apparel,Nike,Main Supplier,,,,,,,Blue / L,TS-1001-BLUE-L,885000100102,7800,5100,25,7200,10,Blue,L,2026-01-01,,\n";
+    const exampleRow3 =
+      "Paracetamol 500mg,PARA-500,,Medicine,,Pharma Supply,Paracetamol,Paracetamol,500mg,Tablet,BPI,REG-12345,Box (100s),PCM-500-BOX,885000200201,12000,9000,20,11000,5,,,2025-06-01,2028-06-01,\n";
+    const blob = new Blob(["\uFEFF", headers, exampleRow1, exampleRow2, exampleRow3], {
       type: "text/csv;charset=utf-8;",
     });
     const url = URL.createObjectURL(blob);
@@ -756,12 +753,14 @@ export function ManageView(props: Props) {
           "registrationid",
           "drugregistration",
         ),
+        productSku: findColumn("productsku", "mastersku"),
+        productBarcode: findColumn("productbarcode", "masterbarcode"),
         variant: findColumn("variantname", "optionname", "variant"),
-        sku: findColumn("variantsku", "optionsku", "sku"),
-        barcode: findColumn("variantbarcode", "optionbarcode", "barcode"),
+        variantSku: findColumn("variantsku", "optionsku", "sku"),
+        variantBarcode: findColumn("variantbarcode", "optionbarcode", "barcode"),
         price: findColumn("sellingprice", "price", "variantprice"),
         cost: findColumn("costprice", "cost"),
-        stock: findColumn("initialstock", "startingstock", "stock", "quantity"),
+        stock: findColumn("variantinitialstock", "variantstock", "initialstock", "startingstock", "stock", "quantity"),
         wholesalePrice: findColumn("wholesaleprice", "wholesalecost"),
         wholesaleMinQuantity: findColumn(
           "minwholesaleqty",
@@ -784,6 +783,8 @@ export function ManageView(props: Props) {
         string,
         {
           name: string;
+          sku: string;
+          barcode: string;
           categoryName: string;
           brandName: string;
           supplierName: string;
@@ -804,6 +805,8 @@ export function ManageView(props: Props) {
         if (!name)
           throw new Error(`Row ${index + 2}: Product Name is required.`);
         const variantName = cell(columns.variant) || "Each";
+        const productSku = cell(columns.productSku);
+        const productBarcode = cell(columns.productBarcode);
         const priceText = cell(columns.price).replace(/,/g, "");
         const costText = cell(columns.cost).replace(/,/g, "");
         const stockText = cell(columns.stock).replace(/,/g, "");
@@ -847,8 +850,8 @@ export function ManageView(props: Props) {
 
         const variantObj: Record<string, unknown> = {
           name: variantName,
-          sku: cell(columns.sku) || generateVariantSku(name, variantName),
-          barcode: cell(columns.barcode) || generateVariantBarcode(),
+          sku: cell(columns.variantSku) || generateVariantSku(name, variantName),
+          barcode: cell(columns.variantBarcode) || generateVariantBarcode(),
           price,
           costPrice,
           initialStock,
@@ -865,15 +868,21 @@ export function ManageView(props: Props) {
           bestBeforeDate: cell(columns.bestBeforeDate) || undefined,
         };
 
-        const key = name.toLocaleLowerCase();
+        const key = (productSku || name).toLocaleLowerCase();
         const product = products.get(key) ?? {
           name,
+          sku: productSku,
+          barcode: productBarcode,
           categoryName,
           brandName,
           supplierName,
           ...medicine,
           variants: [],
         };
+
+        if (product.name.toLocaleLowerCase() !== name.toLocaleLowerCase()) {
+          throw new Error(`Rows for product SKU "${productSku}" use different product names.`);
+        }
 
         if (
           product.categoryName &&
@@ -886,6 +895,12 @@ export function ManageView(props: Props) {
           );
         }
         if (!product.categoryName) product.categoryName = categoryName;
+        if (product.sku && productSku && product.sku.toLowerCase() !== productSku.toLowerCase()) {
+          throw new Error(`Rows for "${name}" use different product SKUs.`);
+        }
+        if (product.barcode && productBarcode && product.barcode !== productBarcode) {
+          throw new Error(`Rows for "${name}" use different product barcodes.`);
+        }
         if (!product.brandName) product.brandName = brandName;
         if (!product.supplierName) product.supplierName = supplierName;
 
@@ -928,22 +943,18 @@ export function ManageView(props: Props) {
         }
 
         const primaryVariant = product.variants[0] as any;
-        const initialStock = product.variants.reduce(
-          (sum, variant) => sum + Number(variant.initialStock ?? 0),
-          0,
-        );
 
         try {
           await props.onCreateProduct({
             name: product.name,
-            sku: serial(),
+            sku: product.sku || serial(),
+            barcode: product.barcode || undefined,
             categoryId: category?.id,
             brandId: brand?.id,
             supplierId: supplier?.id,
             storeId: props.storeId,
             sellingPrice: primaryVariant.price,
             costPrice: primaryVariant.costPrice,
-            initialStock,
             genericName: product.genericName || undefined,
             activeIngredient: product.activeIngredient || undefined,
             strength: product.strength || undefined,
@@ -1271,7 +1282,7 @@ export function ManageView(props: Props) {
                 </span>
                 <span className="truncate text-xs text-slate-400">
                   {section === "products"
-                    ? `${Number(item.price).toLocaleString()} MMK · ${item.stock} in stock`
+                    ? `${Number(item.price).toLocaleString()} MMK · ${item.variants?.length ?? 0} options`
                     : item.code ||
                       (item.isActive === false ? "Inactive" : "Active")}
                 </span>
@@ -1492,7 +1503,7 @@ export function ManageView(props: Props) {
                     <option value="">Choose product</option>
                     {props.products.map((product) => (
                       <option key={product.id} value={product.id}>
-                        {product.name} · {product.stock} in stock
+                        {product.name}
                       </option>
                     ))}
                   </select>
@@ -1503,6 +1514,7 @@ export function ManageView(props: Props) {
                   <label className="block text-xs text-slate-400">
                     Option
                     <select
+                      required
                       value={stockFields.variantId}
                       onChange={(event) =>
                         setStockFields((current) => ({
@@ -1512,12 +1524,12 @@ export function ManageView(props: Props) {
                       }
                       className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
                     >
-                      <option value="">Default active option</option>
+                      <option value="" disabled>Select an option</option>
                       {props.products
                         .find((product) => product.id === stockFields.productId)
                         ?.variants?.map((variant) => (
                           <option key={variant.id} value={variant.id}>
-                            {variant.name}
+                            {variant.name} · {variant.stock ?? 0} on hand
                           </option>
                         ))}
                     </select>
@@ -1912,7 +1924,7 @@ export function ManageView(props: Props) {
                               </label>
                               {dialog === "create" && (
                                 <label className="text-xs font-medium text-slate-400">
-                                  Starting stock
+                                  Starting stock for this option
                                   <input
                                     type="number"
                                     min="0"
@@ -2086,11 +2098,7 @@ export function ManageView(props: Props) {
                           Variants ({variantInputs.length})
                         </h4>
                         <span className="text-xs text-slate-500">
-                          Total stock:{" "}
-                          {variantInputs.reduce(
-                            (sum, v) => sum + (Number(v.initialStock) || 0),
-                            0,
-                          )}
+                          Starting stock is set per option
                         </span>
                       </div>
                       <div className="divide-y divide-slate-800/40">

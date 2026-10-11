@@ -86,7 +86,7 @@ const getLots = (product: Product) =>
       number: inventory.lot?.number ?? "—",
       expiryDate: inventory.lot?.expiryDate,
       quantity: num(inventory.quantity),
-      days: daysUntil(inventory.lot?.expiryDate),
+      days: daysUntil(inventory.lot?.expiryDate ?? undefined),
     }));
 
 const hasExpiryRisk = (product: Product) =>

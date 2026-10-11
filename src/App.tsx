@@ -305,7 +305,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         typeof p.category === "object" && p.category !== null
           ? (p.category as { name: string }).name
           : (p.category as string) || "General",
-      stock: p.stock ?? 0,
+      variants: (p.variants ?? []).map((variant: any) => ({
+        ...variant,
+        stock: Number(variant.stock ?? 0),
+      })),
       barcode: p.barcode || "",
     })) as Product[];
   })();
@@ -803,7 +806,24 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       )}
 
       {activeTab === "inventory" && (
-        <InventoryView products={products} isLoading={isProductsLoading} />
+        <InventoryView
+          products={products.flatMap((product) =>
+            (product.variants ?? []).map((variant) => ({
+              ...product,
+              id: `${product.id}:${variant.id}`,
+              name: `${product.name} · ${variant.name}`,
+              sku: variant.sku || product.sku,
+              price: variant.price,
+              costPrice: variant.costPrice ?? product.costPrice,
+              stock: variant.stock ?? 0,
+              variants: [variant],
+              inventories: product.inventories?.filter(
+                (inventory: any) => inventory.variantId === variant.id,
+              ),
+            })),
+          )}
+          isLoading={isProductsLoading}
+        />
       )}
       {activeTab === "sessions" && (
         <SessionsView

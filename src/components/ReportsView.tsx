@@ -84,9 +84,16 @@ export function ReportsView({
     const netProfit = grossProfit - periodExpenses;
 
     // Stock Valuation Metrics
-    const totalStockQty = products.reduce((sum, p) => sum + (p.stock || 0), 0);
-    const totalStockRetailVal = products.reduce((sum, p) => sum + (p.price || 0) * (p.stock || 0), 0);
-    const totalStockCostVal = products.reduce((sum, p) => sum + (p.costPrice ?? p.price * 0.7) * (p.stock || 0), 0);
+    const sellableOptions = products.flatMap((product) =>
+      (product.variants ?? []).map((variant) => ({
+        stock: Number(variant.stock ?? 0),
+        price: Number(variant.price ?? product.price ?? 0),
+        costPrice: Number(variant.costPrice ?? product.costPrice ?? Number(variant.price ?? product.price ?? 0) * 0.7),
+      })),
+    );
+    const totalStockQty = sellableOptions.reduce((sum, variant) => sum + variant.stock, 0);
+    const totalStockRetailVal = sellableOptions.reduce((sum, variant) => sum + variant.price * variant.stock, 0);
+    const totalStockCostVal = sellableOptions.reduce((sum, variant) => sum + variant.costPrice * variant.stock, 0);
 
     return {
       totalRevenue,

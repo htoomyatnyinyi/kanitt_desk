@@ -191,9 +191,10 @@ export const kanittApi = createApi({
                 p.variants?.[0]?.price,
             ) || 0,
           sku: p.sku || `SKU-${p.id.slice(0, 4)}`,
-          stock: Number(p.totalStock ?? p.stock ?? 0),
+          stock: 0,
           inventories: Array.isArray(p.inventories)
             ? p.inventories.map((inventory: any) => ({
+                variantId: inventory.variantId,
                 quantity: Number(inventory.quantity) || 0,
                 lot: inventory.lot
                   ? {
@@ -218,6 +219,7 @@ export const kanittApi = createApi({
                 name: v.name,
                 sku: v.sku,
                 barcode: v.barcode || "",
+                stock: Number(v.stock ?? 0),
                 price: Number(v.price) || 0,
                 costPrice: Number(v.costPrice) || 0,
               }))
