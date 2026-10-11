@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   useGetHealthQuery,
   useGetProductsQuery,
@@ -37,6 +37,7 @@ import {
   useGetSupplierPaymentsQuery,
   useCreateSupplierPaymentMutation,
   useGetStockTransfersQuery,
+  useGetTransferDestinationStoresQuery,
   useCreateStockTransferMutation,
   useCompleteStockTransferMutation,
   useGetReturnsQuery,
@@ -94,8 +95,11 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const authUser = decodeAuthToken();
   const userRole = String(authUser?.role || "CASHIER").toUpperCase();
   const userPermissions = authUser?.permissions ?? [];
+  const allowedStoreIds = userRole === "CASHIER" ? authUser?.storeIds?.slice(0, 1) ?? [] : authUser?.storeIds ?? [];
   useEffect(() => {
-    if (!canAccessTab(activeTab, userRole, userPermissions)) setActiveTab("pos");
+    if (!canAccessTab(activeTab, userRole, userPermissions)) {
+      setActiveTab(userRole === "ACCOUNTANT" ? "dashboard" : "pos");
+    }
   }, [activeTab, userRole, userPermissions.join("|")]);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -162,12 +166,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     data: purchaseOrders = [],
     isLoading: isPoLoading,
     refetch: refetchPurchaseOrders,
-  } = useGetPurchaseOrdersQuery();
+  } = useGetPurchaseOrdersQuery({ storeId: selectedStore?.id });
   const {
     data: expenses = [],
     isLoading: isExpensesLoading,
     refetch: refetchExpenses,
-  } = useGetExpensesQuery();
+  } = useGetExpensesQuery({ storeId: selectedStore?.id });
   const { data: expenseCategories = [], refetch: refetchExpenseCategories } =
     useGetExpenseCategoriesQuery();
   const {
@@ -180,11 +184,14 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     isLoading: isTransfersLoading,
     refetch: refetchTransfers,
   } = useGetStockTransfersQuery();
+  const { data: transferDestinationStores = [] } = useGetTransferDestinationStoresQuery(undefined, {
+    skip: !canAccessTab("erp", userRole, userPermissions),
+  });
   const {
     data: returns = [],
     isLoading: isReturnsLoading,
     refetch: refetchReturns,
-  } = useGetReturnsQuery();
+  } = useGetReturnsQuery({ storeId: selectedStore?.id });
   const [createOrderApi, { isLoading: isCheckoutLoading }] =
     useCreateOrderMutation();
   const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
@@ -303,7 +310,11 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     })) as Product[];
   })();
 
-  const stores = apiStores || [];
+  const stores = useMemo(() => {
+    const available = apiStores || [];
+    if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "ACCOUNTANT") return available;
+    return available.filter((store) => allowedStoreIds.includes(store.id));
+  }, [apiStores, userRole, allowedStoreIds.join("|")]);
 
   useEffect(() => {
     let stale = false;
@@ -356,6 +367,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     if (stores.length > 0 && !selectedStore) {
       setSelectedStore(stores[0]);
+    } else if (selectedStore && !stores.some((store) => store.id === selectedStore.id)) {
+      setSelectedStore(stores[0] ?? null);
     }
   }, [stores, selectedStore]);
 
@@ -628,6 +641,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           suppliers={suppliers}
           customers={customers}
           staff={staff}
+          userRole={userRole}
           storeId={selectedStore?.id}
           stores={stores}
           loading={isProductsLoading}
@@ -677,7 +691,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       {activeTab === "erp" && (
         <ERPView
           selectedStoreId={selectedStore?.id}
+          userRole={userRole}
           stores={stores}
+          transferDestinationStores={transferDestinationStores}
           products={products}
           suppliers={suppliers}
           orders={apiOrders}

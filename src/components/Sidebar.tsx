@@ -39,6 +39,12 @@ export type Tab =
   | "settings"
   | "admin";
 export function canAccessTab(tab: Tab, role: string, permissions: string[] = []) {
+  if (role === "ACCOUNTANT") {
+    return ["dashboard", "orders", "inventory", "reports", "sync"].includes(tab);
+  }
+  if (tab === "erp" && role === "MANAGER") {
+    return permissions.includes("MANAGE_INVENTORY");
+  }
   const roleAllowed: Partial<Record<Tab, string[]>> = {
     dashboard: ["ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT", "SUPER_ADMIN"],
     erp: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
@@ -241,7 +247,11 @@ export function Sidebar({
         {!isCompact && (
           <div className="mt-1.5 hidden items-center gap-2 border-t border-slate-800 pt-1.5 md:flex">
             <StoreIcon className="h-3.5 w-3.5 shrink-0 text-sky-300" />
-            {stores.length ? (
+            {stores.length ? userRole === "CASHIER" || stores.length === 1 ? (
+              <span className="w-full truncate text-xs font-semibold text-slate-200">
+                {selectedStore?.name || stores[0]?.name}
+              </span>
+            ) : (
               <select
                 aria-label="Active store"
                 value={selectedStore?.id || ""}

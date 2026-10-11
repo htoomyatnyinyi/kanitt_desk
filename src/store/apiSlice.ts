@@ -383,10 +383,10 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Products", "Inventory"],
     }),
-    getPurchaseOrders: builder.query<any[], void>({
-      query: () => ({
+    getPurchaseOrders: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId } = {}) => ({
         url: "/tenant/purchase-orders",
-        params: { limit: 10000 },
+        params: { limit: 10000, ...(storeId ? { storeId } : {}) },
       }),
       transformResponse: (r: any) => unwrapList(r, "purchaseOrders"),
       providesTags: ["PurchaseOrders"],
@@ -431,8 +431,8 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["PurchaseOrders", "Products", "Inventory"],
     }),
-    getExpenses: builder.query<any[], void>({
-      query: () => "/tenant/expenses",
+    getExpenses: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId }) => ({ url: "/tenant/expenses", params: storeId ? { storeId } : {} }),
       transformResponse: (r: any) => unwrapList(r, "expenses"),
       providesTags: ["Expenses"],
     }),
@@ -480,6 +480,10 @@ export const kanittApi = createApi({
       transformResponse: (r: any) => unwrapList(r, "stockTransfers"),
       providesTags: ["StockTransfers"],
     }),
+    getTransferDestinationStores: builder.query<Store[], void>({
+      query: () => "/tenant/stock-transfers/destinations",
+      transformResponse: (r: any) => r?.stores ?? [],
+    }),
     createStockTransfer: builder.mutation<any, Record<string, unknown>>({
       query: (body) => ({
         url: "/tenant/stock-transfers",
@@ -495,8 +499,8 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["StockTransfers", "Products", "Inventory"],
     }),
-    getReturns: builder.query<any[], void>({
-      query: () => ({ url: "/tenant/returns", params: { limit: 10000 } }),
+    getReturns: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId }) => ({ url: "/tenant/returns", params: { limit: 10000, ...(storeId ? { storeId } : {}) } }),
       transformResponse: (r: any) => unwrapList(r, "returns"),
       providesTags: ["Returns"],
     }),
@@ -921,6 +925,7 @@ export const {
   useGetSupplierPaymentsQuery,
   useCreateSupplierPaymentMutation,
   useGetStockTransfersQuery,
+  useGetTransferDestinationStoresQuery,
   useCreateStockTransferMutation,
   useCompleteStockTransferMutation,
   useGetReturnsQuery,
