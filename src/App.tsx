@@ -681,6 +681,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           userRole={userRole}
           storeId={selectedStore?.id}
           stores={stores}
+          allowedTransferStoreIds={allowedStoreIds}
           loading={isProductsLoading}
           onCreateProduct={(payload) => createCatalogProduct(payload).unwrap()}
           onCreateEntity={(section, payload) => {
@@ -843,7 +844,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       {activeTab === "inventory" && (
         <InventoryView
           storeId={selectedStore?.id}
+          stores={stores}
           userRole={userRole}
+          userPermissions={userPermissions}
           products={products.flatMap((product) =>
             (product.variants ?? []).map((variant) => ({
               ...product,

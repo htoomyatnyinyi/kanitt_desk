@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
 import { decodeAuthToken } from "../services/secureStorage";
+import { useGetStockRequestsQuery } from "../store/apiSlice";
 
 export type Tab =
   | "dashboard"
@@ -186,6 +187,11 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const currentUser = decodeAuthToken();
   const userRole = (currentUser?.role || "CASHIER").toUpperCase();
+  const { data: visibleStockRequests = [] } = useGetStockRequestsQuery({ storeId: ["ADMIN", "SUPER_ADMIN"].includes(userRole) ? undefined : selectedStore?.id }, {
+    pollingInterval: 15000,
+    skip: (!selectedStore?.id && !["ADMIN", "SUPER_ADMIN"].includes(userRole)) || userRole === "ACCOUNTANT",
+  });
+  const openStockRequestCount = visibleStockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).length;
 
   const isCompact = collapsed;
 
@@ -360,8 +366,11 @@ export function Sidebar({
                         className={`h-4 w-4 shrink-0 ${active ? "text-sky-300" : "text-slate-500 group-hover:text-slate-300"}`}
                       />
                       {!isCompact && (
-                        <span className="hidden flex-1 truncate md:block">
-                          {label}
+                        <span className="hidden flex-1 truncate md:block">{label}</span>
+                      )}
+                      {id === "inventory" && openStockRequestCount > 0 && (
+                        <span className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`} aria-label={`${openStockRequestCount} open stock requests`}>
+                          {openStockRequestCount > 99 ? "99+" : openStockRequestCount}
                         </span>
                       )}
                     </button>

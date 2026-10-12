@@ -530,14 +530,14 @@ export const kanittApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["StockTransfers"],
+      invalidatesTags: ["StockTransfers", "StockRequests", "Notifications"],
     }),
     completeStockTransfer: builder.mutation<any, string>({
       query: (id) => ({
         url: `/tenant/stock-transfers/${id}/complete`,
         method: "POST",
       }),
-      invalidatesTags: ["StockTransfers", "Products", "Inventory"],
+      invalidatesTags: ["StockTransfers", "Products", "Inventory", "StockRequests", "Notifications"],
     }),
     getReturns: builder.query<any[], { storeId?: string }>({
       query: ({ storeId }) => ({ url: "/tenant/returns", params: { limit: 10000, ...(storeId ? { storeId } : {}) } }),
