@@ -49,6 +49,7 @@ export interface Store {
   name: string;
   code?: string;
   address?: string;
+  phone?: string;
   status?: string;
 }
 
@@ -74,6 +75,7 @@ export interface ApiOrder {
   orderNumber?: string;
   storeId: string;
   sessionId?: string | null;
+  store?: { name?: string; address?: string; phone?: string };
   createdAt: string;
   status: string;
   paymentStatus?: string;

@@ -34,6 +34,10 @@ export function OrdersView({ orders, isLoading }: { orders: ApiOrder[]; isLoadin
     const data: ReceiptData = {
       orderNumber: order.orderNumber || order.id.slice(0, 8),
       createdAt: order.createdAt,
+      storeId: order.storeId,
+      storeName: order.store?.name,
+      storeAddress: order.store?.address,
+      storePhone: order.store?.phone,
       items: (order.items || []).map((item) => ({
         name: item.product?.name || "Product",
         quantity: item.quantity,
@@ -45,6 +49,10 @@ export function OrdersView({ orders, isLoading }: { orders: ApiOrder[]; isLoadin
       discountAmount: order.discountAmount ?? 0,
       grandTotal: order.grandTotal,
       paymentMethod: order.paymentMethod || "CASH",
+      payments: order.paymentBreakdown?.map((payment) => ({
+        method: payment.method,
+        amount: Number(payment.amount),
+      })),
       cashierName: order.user?.name || order.user?.email,
     };
     setSelectedReceipt(data);

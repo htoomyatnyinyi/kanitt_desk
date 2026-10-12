@@ -8,6 +8,7 @@ import {
   useQuoteOrderMutation,
   useCompleteOrderMutation,
   useGetOrdersQuery,
+  useGetStoreSettingsQuery,
   useGetCategoriesQuery,
   useGetBrandsQuery,
   useGetSuppliersQuery,
@@ -147,6 +148,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const { data: apiSessions, refetch: refetchSessions } = useGetSessionsQuery({
     storeId: selectedStore?.id,
   });
+  const { data: apiStoreSettings = [] } = useGetStoreSettingsQuery(
+    { storeId: selectedStore?.id },
+    { skip: !selectedStore?.id },
+  );
   const {
     data: apiOrders = [],
     isLoading: isOrdersLoading,
@@ -596,6 +601,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       orderNumber: checkoutOrderNumber,
       createdAt: new Date().toISOString(),
       storeName: selectedStore?.name,
+      storeId: selectedStore?.id,
+      storeAddress: selectedStore?.address,
+      storePhone: selectedStore?.phone,
+      receiptHeader: String(apiStoreSettings.find((setting: any) => setting.settingKey === "receipt_header")?.settingValue || selectedStore?.name || "KANITT RETAIL"),
+      receiptFooter: String(apiStoreSettings.find((setting: any) => setting.settingKey === "receipt_footer")?.settingValue || "Thank you for shopping with us!"),
+      allowAutoPrint: true,
       items: cart.map((item) => ({
         name: item.name,
         quantity: item.quantity,
@@ -608,6 +619,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       grandTotal: total,
       paymentMethod:
         payments && payments.length > 1 ? "MIXED_PAYMENT" : paymentMethod,
+      payments,
       receivedAmount: payments?.length
         ? total
         : Number(receivedAmount) || total,
@@ -861,7 +873,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {activeTab === "settings" && (
-        <SettingsView connected={isConnected} storeName={selectedStore?.name} />
+        <SettingsView
+          connected={isConnected}
+          storeName={selectedStore?.name}
+          storeId={selectedStore?.id}
+          canEditStoreSettings={["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(userRole)}
+        />
       )}
 
       <PaymentModal

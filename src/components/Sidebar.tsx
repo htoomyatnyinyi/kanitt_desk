@@ -38,9 +38,15 @@ export type Tab =
   | "sync"
   | "settings"
   | "admin";
-export function canAccessTab(tab: Tab, role: string, permissions: string[] = []) {
+export function canAccessTab(
+  tab: Tab,
+  role: string,
+  permissions: string[] = [],
+) {
   if (role === "ACCOUNTANT") {
-    return ["dashboard", "orders", "inventory", "reports", "sync"].includes(tab);
+    return ["dashboard", "orders", "inventory", "reports", "sync"].includes(
+      tab,
+    );
   }
   if (tab === "erp" && role === "MANAGER") {
     return permissions.includes("MANAGE_INVENTORY");
@@ -58,7 +64,10 @@ export function canAccessTab(tab: Tab, role: string, permissions: string[] = [])
     manage: ["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES"],
     activity: ["VIEW_AUDIT_LOGS"],
   };
-  if (permissionAllowed[tab]) return permissions.some((permission) => permissionAllowed[tab]!.includes(permission));
+  if (permissionAllowed[tab])
+    return permissions.some((permission) =>
+      permissionAllowed[tab]!.includes(permission),
+    );
   if (roleAllowed[tab]) return roleAllowed[tab]!.includes(role);
   return true;
 }
@@ -77,12 +86,23 @@ interface SidebarProps {
 
 const groups: {
   name: string;
-  items: { id: Tab; label: string; icon: LucideIcon; roles?: string[]; permissions?: string[] }[];
+  items: {
+    id: Tab;
+    label: string;
+    icon: LucideIcon;
+    roles?: string[];
+    permissions?: string[];
+  }[];
 }[] = [
   {
     name: "Workspace",
     items: [
-      { id: "dashboard", label: "Overview", icon: LayoutDashboard, permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"] },
+      {
+        id: "dashboard",
+        label: "Overview",
+        icon: LayoutDashboard,
+        permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
+      },
       { id: "pos", label: "Point of sale", icon: ShoppingBag },
     ],
   },
@@ -97,12 +117,27 @@ const groups: {
   {
     name: "Operations",
     items: [
-      { id: "reports", label: "Reports & analytics", icon: BarChart3, permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"] },
-      { id: "erp", label: "ERP operations", icon: BriefcaseBusiness, roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
-      { id: "commerce", label: "Pricing & finance", icon: BadgePercent, roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
+      {
+        id: "reports",
+        label: "Reports & analytics",
+        icon: BarChart3,
+        permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
+      },
+      {
+        id: "erp",
+        label: "ERP operations",
+        icon: BriefcaseBusiness,
+        roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+      },
+      {
+        id: "commerce",
+        label: "Configuration",
+        icon: BadgePercent,
+        roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+      },
       {
         id: "manage",
-        label: "Catalog & people",
+        label: "Manage",
         icon: Users,
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
         permissions: ["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES"],
@@ -126,7 +161,12 @@ const groups: {
         roles: ["ADMIN", "SUPER_ADMIN"],
       },
       { id: "sync", label: "Sync status", icon: Cloud },
-      { id: "settings", label: "Settings", icon: Settings2, roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
+      {
+        id: "settings",
+        label: "Settings",
+        icon: Settings2,
+        roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+      },
     ],
   },
 ];
@@ -247,32 +287,34 @@ export function Sidebar({
         {!isCompact && (
           <div className="mt-1.5 hidden items-center gap-2 border-t border-slate-800 pt-1.5 md:flex">
             <StoreIcon className="h-3.5 w-3.5 shrink-0 text-sky-300" />
-            {stores.length ? userRole === "CASHIER" || stores.length === 1 ? (
-              <span className="w-full truncate text-xs font-semibold text-slate-200">
-                {selectedStore?.name || stores[0]?.name}
-              </span>
-            ) : (
-              <select
-                aria-label="Active store"
-                value={selectedStore?.id || ""}
-                onChange={(event) => {
-                  const store = stores.find(
-                    (candidate) => candidate.id === event.target.value,
-                  );
-                  if (store) setSelectedStore(store);
-                }}
-                className="w-full min-w-0 bg-transparent text-xs font-semibold text-slate-200 outline-none"
-              >
-                {stores.map((store) => (
-                  <option
-                    key={store.id}
-                    value={store.id}
-                    className="bg-slate-900"
-                  >
-                    {store.name}
-                  </option>
-                ))}
-              </select>
+            {stores.length ? (
+              userRole === "CASHIER" || stores.length === 1 ? (
+                <span className="w-full truncate text-xs font-semibold text-slate-200">
+                  {selectedStore?.name || stores[0]?.name}
+                </span>
+              ) : (
+                <select
+                  aria-label="Active store"
+                  value={selectedStore?.id || ""}
+                  onChange={(event) => {
+                    const store = stores.find(
+                      (candidate) => candidate.id === event.target.value,
+                    );
+                    if (store) setSelectedStore(store);
+                  }}
+                  className="w-full min-w-0 bg-transparent text-xs font-semibold text-slate-200 outline-none"
+                >
+                  {stores.map((store) => (
+                    <option
+                      key={store.id}
+                      value={store.id}
+                      className="bg-slate-900"
+                    >
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              )
             ) : (
               <span className="truncate text-xs text-slate-500">
                 {storeError ? "Stores unavailable" : "No stores"}
@@ -288,7 +330,9 @@ export function Sidebar({
       >
         {groups.map((group) => {
           const userPermissions = currentUser?.permissions ?? [];
-          const visibleItems = group.items.filter((item) => canAccessTab(item.id, userRole, userPermissions));
+          const visibleItems = group.items.filter((item) =>
+            canAccessTab(item.id, userRole, userPermissions),
+          );
           if (visibleItems.length === 0) return null;
           return (
             <div key={group.name}>
