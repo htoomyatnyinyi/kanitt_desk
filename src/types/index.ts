@@ -14,6 +14,7 @@ export interface Product {
   barcode: string;
   inventories?: { quantity: number; reservedQty?: number; reorderPoint?: number; reorderQty?: number; lot?: { number: string; expiryDate?: string | null; manufacturingDate?: string | null } | null }[];
   image?: string;
+  imageUrl?: string;
   variants?: { id: string; name: string; sku: string; barcode?: string; price: number; costPrice?: number; stock?: number; availableStock?: number }[];
   // Medicine / Pharmacy fields
   genericName?: string;

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { Product } from "../types";
+import { apiService, resolveMediaUrl } from "../services/api";
 
 type Section =
   | "products"
@@ -96,6 +97,7 @@ const emptyProduct: Fields = {
   dosageForm: "",
   manufacturer: "",
   registrationNumber: "",
+  imageUrl: "",
 };
 const formFields: Record<
   EntitySection,
@@ -416,6 +418,7 @@ export function ManageView(props: Props) {
       section === "products"
         ? {
             name: item.name || "",
+            imageUrl: item.imageUrl || item.image || "",
             categoryId: item.categoryId || "",
             brandId: item.brandId || "",
             supplierId: item.supplierId || "",
@@ -531,6 +534,7 @@ export function ManageView(props: Props) {
         const payload: Record<string, unknown> = {};
         if (section === "products") {
           payload.name = fields.name.trim();
+          payload.imageUrl = fields.imageUrl || undefined;
           for (const key of ["sku", "barcode"] as const)
             if (fields[key]?.trim()) payload[key] = fields[key].trim();
           if (fields.costPrice !== "")
@@ -623,6 +627,7 @@ export function ManageView(props: Props) {
 
         await props.onCreateProduct({
           name: fields.name.trim(),
+          imageUrl: fields.imageUrl || undefined,
           sku: fields.sku.trim() || undefined,
           barcode: fields.barcode.trim() || undefined,
           categoryId: fields.categoryId || undefined,
@@ -1635,6 +1640,20 @@ export function ManageView(props: Props) {
                           className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-none transition-all"
                         />
                       </label>
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
+                        <label className="block text-xs font-semibold text-slate-300">Product photo <span className="font-normal text-slate-500">(JPG, PNG or WebP · up to 5 MB)</span>
+                          <input type="file" accept="image/jpeg,image/png,image/webp" className="mt-2 block w-full text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-800 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white" onChange={async (event) => {
+                            const input = event.currentTarget;
+                            const file = event.currentTarget.files?.[0];
+                            if (!file || !props.storeId) return;
+                            setBusy(true); setError(null);
+                            try { const imageUrl = await apiService.uploadProductImage(file, props.storeId, editing?.id); setField("imageUrl", imageUrl); }
+                            catch (cause) { setError(cause instanceof Error ? cause.message : "Image upload failed."); }
+                            finally { setBusy(false); input.value = ""; }
+                          }} />
+                        </label>
+                        {fields.imageUrl && <div className="mt-3 flex items-center gap-3"><img src={resolveMediaUrl(fields.imageUrl)} alt="Product preview" className="h-16 w-16 rounded-lg bg-slate-800 object-cover" /><button type="button" onClick={() => setField("imageUrl", "")} className="text-xs text-rose-300 hover:text-rose-200">Remove photo</button></div>}
+                      </div>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <label className="block text-xs font-medium text-slate-400">
                           Category{" "}

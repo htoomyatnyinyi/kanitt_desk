@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Search, Plus, Barcode, X, Layers } from "lucide-react";
 import { Product } from "../types";
+import { resolveMediaUrl } from "../services/api";
 
 /* ------------------------------------------------------------------ */
 /*  Variant helpers                                                    */
@@ -137,7 +138,8 @@ export function PosView({
         return;
       }
       if (variants.length === 1) {
-        if (Number(variants[0].availableStock ?? variants[0].stock ?? 0) <= 0) return;
+        if (Number(variants[0].availableStock ?? variants[0].stock ?? 0) <= 0)
+          return;
         addToCart(product, variants[0]);
         return;
       }
@@ -264,6 +266,14 @@ export function PosView({
               onClick={() => variants.length > 0 && handleProductClick(product)}
               className={`group bg-slate-900/70 hover:bg-slate-900 border border-slate-800/80 hover:border-sky-500/50 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:shadow-sky-500/5 ${variantCount > 0 ? "cursor-pointer active:scale-[0.98]" : "opacity-50"}`}
             >
+              {product.image && (
+                <img
+                  src={resolveMediaUrl(product.image)}
+                  alt=""
+                  loading="lazy"
+                  className="mb-3 aspect-4/3 w-full rounded-xl bg-slate-800 object-cover"
+                />
+              )}
               <div>
                 <div className="flex justify-between items-start gap-2 mb-2">
                   <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 truncate max-w-[60%]">
@@ -429,7 +439,8 @@ export function PosView({
             {/* Variant list */}
             <ul className="flex-1 overflow-y-auto p-2">
               {filteredVariants.map((variant) => {
-                const vStock = Number(variant.availableStock ?? variant.stock) || 0;
+                const vStock =
+                  Number(variant.availableStock ?? variant.stock) || 0;
                 const outOfStock = vStock <= 0;
                 const price = Number(variant.price ?? variantPicker.price) || 0;
                 const subtitle = variantSubtitle(variant);

@@ -198,6 +198,8 @@ export const kanittApi = createApi({
         return list.map((p: any) => ({
           id: p.id,
           name: p.name,
+          image: p.imageUrl,
+          imageUrl: p.imageUrl,
           category:
             typeof p.category === "object"
               ? p.category?.name || "General"

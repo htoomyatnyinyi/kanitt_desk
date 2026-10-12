@@ -1,6 +1,11 @@
-let _base = import.meta.env.VITE_API_URL || "https://pos.oasislab.de5.net";
-if (!_base.endsWith("/api")) _base = `${_base}/api`;
+let _base = (import.meta.env.VITE_API_URL || "https://pos.oasislab.de5.net").trim().replace(/\/+$/, "");
+if (!/\/api$/i.test(_base)) _base = `${_base}/api`;
 const SERVER_URL = _base;
+export const resolveMediaUrl = (path?: string) => {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${SERVER_URL.replace(/\/api$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+};
 
 export interface ApiProduct {
   id: string;
@@ -108,6 +113,32 @@ class ApiService {
     return this.request<ApiProduct[]>("/tenant/products");
   }
 
+  async uploadProductImage(file: File, storeId: string, productId?: string) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("storeId", storeId);
+    if (productId) form.append("productId", productId);
+    const response = await fetch(`${SERVER_URL}/tenant/media/images`, {
+      method: "POST",
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+      body: form,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Image upload failed.");
+    return data.imageUrl as string;
+  }
+
+  async getChatMessages(storeId: string) {
+    return this.request<{ messages: ChatMessage[] }>(`/tenant/chat/${encodeURIComponent(storeId)}/messages`);
+  }
+
+  async sendChatMessage(storeId: string, body: string) {
+    return this.request<{ message: ChatMessage }>(`/tenant/chat/${encodeURIComponent(storeId)}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    });
+  }
+
   // Fetch Active/All Sessions
   async getSessions() {
     return this.request<ApiSession[]>("/tenant/sessions");
@@ -147,6 +178,15 @@ class ApiService {
       body: JSON.stringify(orderData),
     });
   }
+}
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  senderId: string;
+  sender?: { name?: string; username?: string };
+  createdAt: string;
+  mine?: boolean;
 }
 
 export const apiService = new ApiService();

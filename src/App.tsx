@@ -67,6 +67,7 @@ import { ActivityLogView } from "./components/ActivityLogView";
 import { BusinessToolsView } from "./components/BusinessToolsView";
 import { AdminView, NotificationsView } from "./components/AdminView";
 import { StockRequestsView } from "./components/StockRequestsView";
+import { ChatView } from "./components/ChatView";
 import { ReportsView } from "./components/ReportsView";
 import { ReceiptModal, ReceiptData } from "./components/ReceiptModal";
 import {
@@ -86,6 +87,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     | "inventory"
     | "requests"
     | "notifications"
+    | "chat"
     | "sessions"
     | "manage"
     | "erp"
@@ -789,6 +791,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       )}
       {activeTab === "admin" && <AdminView stores={stores} />}
       {activeTab === "notifications" && <NotificationsView />}
+      {activeTab === "chat" && <ChatView storeId={selectedStore?.id} storeName={selectedStore?.name} />}
       {activeTab === "requests" && <StockRequestsView storeId={selectedStore?.id} stores={stores} userRole={userRole} userPermissions={userPermissions} allowedTransferStoreIds={allowedStoreIds} />}
       {activeTab === "sync" && (
         <SyncView

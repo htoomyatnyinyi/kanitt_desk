@@ -12,6 +12,7 @@ import {
   Clock3,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   ReceiptText,
   RefreshCw,
   ClipboardCheck,
@@ -25,7 +26,10 @@ import {
 } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
 import { decodeAuthToken } from "../services/secureStorage";
-import { useGetNotificationUnreadCountQuery, useGetStockRequestsQuery } from "../store/apiSlice";
+import {
+  useGetNotificationUnreadCountQuery,
+  useGetStockRequestsQuery,
+} from "../store/apiSlice";
 
 export type Tab =
   | "dashboard"
@@ -34,6 +38,7 @@ export type Tab =
   | "inventory"
   | "requests"
   | "notifications"
+  | "chat"
   | "sessions"
   | "manage"
   | "erp"
@@ -49,9 +54,14 @@ export function canAccessTab(
   permissions: string[] = [],
 ) {
   if (role === "ACCOUNTANT") {
-    return ["dashboard", "orders", "inventory", "reports", "sync"].includes(
-      tab,
-    );
+    return [
+      "dashboard",
+      "orders",
+      "inventory",
+      "reports",
+      "sync",
+      "chat",
+    ].includes(tab);
   }
   if (tab === "erp" && role === "MANAGER") {
     return permissions.includes("MANAGE_INVENTORY");
@@ -109,6 +119,7 @@ const groups: {
         permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
       },
       { id: "pos", label: "Point of sale", icon: ShoppingBag },
+      { id: "chat", label: "Store chat", icon: MessageCircle },
     ],
   },
   {
@@ -193,12 +204,26 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const currentUser = decodeAuthToken();
   const userRole = (currentUser?.role || "CASHIER").toUpperCase();
-  const { data: visibleStockRequests = [] } = useGetStockRequestsQuery({ storeId: ["ADMIN", "SUPER_ADMIN"].includes(userRole) ? undefined : selectedStore?.id }, {
-    pollingInterval: 15000,
-    skip: (!selectedStore?.id && !["ADMIN", "SUPER_ADMIN"].includes(userRole)) || userRole === "ACCOUNTANT",
-  });
-  const { data: unreadNotifications = 0 } = useGetNotificationUnreadCountQuery(undefined, { pollingInterval: 30000 });
-  const openStockRequestCount = visibleStockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).length;
+  const { data: visibleStockRequests = [] } = useGetStockRequestsQuery(
+    {
+      storeId: ["ADMIN", "SUPER_ADMIN"].includes(userRole)
+        ? undefined
+        : selectedStore?.id,
+    },
+    {
+      pollingInterval: 15000,
+      skip:
+        (!selectedStore?.id && !["ADMIN", "SUPER_ADMIN"].includes(userRole)) ||
+        userRole === "ACCOUNTANT",
+    },
+  );
+  const { data: unreadNotifications = 0 } = useGetNotificationUnreadCountQuery(
+    undefined,
+    { pollingInterval: 30000 },
+  );
+  const openStockRequestCount = visibleStockRequests.filter((request: any) =>
+    ["PENDING", "ACKNOWLEDGED"].includes(request.status),
+  ).length;
 
   const isCompact = collapsed;
 
@@ -213,12 +238,23 @@ export function Sidebar({
           </div>
           {!isCompact && (
             <div className="hidden min-w-0 flex-1 md:block">
-              <h1 className="truncate text-sm font-extrabold tracking-wide text-white">
+              {/* business organism name */}
+              {/* here i want to show the business name and address */}
+              {/* this is under the business organism */}
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-white">
+                  {selectedStore?.name}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {selectedStore?.id}
+                </span>
+              </div>
+              {/* <h1 className="truncate text-sm font-extrabold tracking-wide text-white">
                 KANITT
               </h1>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 Retail POS
-              </p>
+              </p> */}
             </div>
           )}
         </div>
@@ -373,16 +409,28 @@ export function Sidebar({
                         className={`h-4 w-4 shrink-0 ${active ? "text-sky-300" : "text-slate-500 group-hover:text-slate-300"}`}
                       />
                       {!isCompact && (
-                        <span className="hidden flex-1 truncate md:block">{label}</span>
+                        <span className="hidden flex-1 truncate md:block">
+                          {label}
+                        </span>
                       )}
                       {id === "requests" && openStockRequestCount > 0 && (
-                        <span className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`} aria-label={`${openStockRequestCount} open stock requests`}>
-                          {openStockRequestCount > 99 ? "99+" : openStockRequestCount}
+                        <span
+                          className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`}
+                          aria-label={`${openStockRequestCount} open stock requests`}
+                        >
+                          {openStockRequestCount > 99
+                            ? "99+"
+                            : openStockRequestCount}
                         </span>
                       )}
                       {id === "notifications" && unreadNotifications > 0 && (
-                        <span className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-sky-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`} aria-label={`${unreadNotifications} unread notifications`}>
-                          {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                        <span
+                          className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-sky-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`}
+                          aria-label={`${unreadNotifications} unread notifications`}
+                        >
+                          {unreadNotifications > 99
+                            ? "99+"
+                            : unreadNotifications}
                         </span>
                       )}
                     </button>
