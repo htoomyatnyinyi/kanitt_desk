@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Check, Clock3, PackageCheck, Truck, XCircle } from "lucide-react";
+import { ChoiceCards } from "./ChoiceCards";
 import {
   Store as ApiStore,
   useCompleteStockTransferMutation,
@@ -34,6 +35,9 @@ export function StockRequestsView({ storeId, stores, userRole, userPermissions, 
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState("");
   const sourceStores = isAdmin ? stores : stores.filter((store) => allowedTransferStoreIds.includes(store.id));
+  const eligibleSourceStores = transferRequest
+    ? sourceStores.filter((store) => store.id !== transferRequest.storeId)
+    : [];
   const visibleRequests = requests.filter((request: any) => showHistory ? !openStatuses.includes(request.status) : openStatuses.includes(request.status));
 
   const submitTransfer = async (event: FormEvent) => {
@@ -128,18 +132,29 @@ export function StockRequestsView({ storeId, stores, userRole, userPermissions, 
         </section>
       </div>
 
-      {transferRequest && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransferRequest(null); }}>
-        <form onSubmit={submitTransfer} className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl">
-          <h2 className="text-lg font-bold text-white">Send stock to store</h2>
+      {transferRequest && <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/75 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransferRequest(null); }}>
+        <form onSubmit={submitTransfer} className="w-full max-w-2xl rounded-t-3xl border border-slate-700 bg-slate-950 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:p-6">
+          <h2 className="text-xl font-bold text-white">Send stock to store</h2>
           <p className="mt-1 text-sm text-slate-400">{transferRequest.quantity} × {transferRequest.product?.name} · {transferRequest.variant?.name}</p>
-          <label className="mt-4 block text-xs font-semibold text-slate-300">Send from
-            <select required autoFocus value={sourceStoreId} onChange={(event) => setSourceStoreId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white">
-              <option value="">Choose source store</option>
-              {sourceStores.filter((store) => store.id !== transferRequest.storeId).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-            </select>
-          </label>
+          <div className="mt-5">
+            {eligibleSourceStores.length ? (
+            <ChoiceCards
+              label="Choose a source store"
+              value={sourceStoreId}
+              onChange={setSourceStoreId}
+              columns={2}
+              options={eligibleSourceStores.map((store) => ({
+                value: store.id,
+                label: store.name,
+                description: "Stock will be deducted from this branch when sent.",
+              }))}
+            />
+            ) : (
+              <p className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">You don’t have access to another source store for this transfer.</p>
+            )}
+          </div>
           <p className="mt-3 rounded-xl bg-slate-900 px-3 py-2.5 text-[11px] leading-5 text-slate-400">Sending reduces source stock and marks the shipment in transit. The receiving store adds it to stock after confirming arrival.</p>
-          <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setTransferRequest(null)} className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-400">Cancel</button><button disabled={!sourceStoreId || isCreatingTransfer} className="rounded-xl bg-sky-400 px-4 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">{isCreatingTransfer ? "Sending…" : "Send stock"}</button></div>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setTransferRequest(null)} className="w-full rounded-xl px-4 py-3 text-sm font-bold text-slate-400 hover:bg-slate-900 sm:w-auto sm:py-2.5">Cancel</button><button disabled={!sourceStoreId || isCreatingTransfer} className="w-full rounded-xl bg-sky-400 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-50 sm:w-auto sm:py-2.5">{isCreatingTransfer ? "Sending…" : "Send stock"}</button></div>
         </form>
       </div>}
     </main>

@@ -25,6 +25,7 @@ import { ApiOrder } from "../store/apiSlice";
 import { Product } from "../types";
 import { WorkflowGuide } from "./WorkflowGuide";
 import { SearchableProductPicker } from "./SearchableProductPicker";
+import { ChoiceCards } from "./ChoiceCards";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -1250,7 +1251,7 @@ export function ERPView(props: Props) {
       {/* ------------------------------------------------------------ */}
       <Modal
         open={dialog || categoryDialog}
-        maxWidth={module === "transfers" ? "max-w-2xl" : "max-w-xl"}
+        maxWidth={module === "transfers" ? "max-w-5xl" : "max-w-4xl"}
         onClose={() => {
           if (saving) return;
           setDialog(false);
@@ -1472,13 +1473,18 @@ export function ERPView(props: Props) {
                     "Select a store first"}
                 </strong>
               </p>
-              <Select
+              <ChoiceCards
                 label="Destination"
                 value={fields.toStoreId}
-                onChange={(value) => setFields({ ...fields, toStoreId: value })}
+                onChange={(value) => setFields((current) => ({ ...current, toStoreId: value }))}
+                columns={3}
                 options={transferDestinationStores
                   .filter((item) => item.id !== selectedStoreId)
-                  .map((item) => [item.id, item.name])}
+                  .map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    description: "Receiving branch",
+                  }))}
               />
               <SearchableProductPicker
                 products={products}
@@ -1493,16 +1499,21 @@ export function ERPView(props: Props) {
                 }}
               />
               {selectedProductVariants.length > 0 && (
-                <Select
+                <ChoiceCards
                   label="Variant"
                   value={fields.variantId}
-                  onChange={(value) =>
-                    setFields({ ...fields, variantId: value })
-                  }
-                  options={selectedProductVariants.map((variant) => [
-                    variant.id,
-                    `${variant.name} · ${Number(variant.availableStock ?? variant.stock ?? 0).toLocaleString()} available`,
-                  ])}
+                  onChange={(value) => setFields((current) => ({ ...current, variantId: value }))}
+                  columns={2}
+                  options={selectedProductVariants.map((variant) => {
+                    const available = Number(variant.availableStock ?? variant.stock ?? 0);
+                    return {
+                      value: variant.id,
+                      label: variant.name,
+                      description: `${available.toLocaleString()} units available to send`,
+                      badge: variant.sku,
+                      disabled: available < 1,
+                    };
+                  })}
                 />
               )}
               {selectedProduct && selectedProductVariants.length === 0 && (
@@ -1642,7 +1653,7 @@ export function ERPView(props: Props) {
 
           <ErrorNote message={formError} />
 
-          <div className="mt-6 flex justify-end gap-3">
+          <div className="sticky bottom-0 z-10 -mx-4 mt-5 flex flex-col-reverse gap-2 border-t border-slate-800 bg-slate-900/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:mt-6 sm:flex-row sm:justify-end sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0">
             <button
               type="button"
               onClick={() => {
@@ -1650,14 +1661,14 @@ export function ERPView(props: Props) {
                 setCategoryDialog(false);
               }}
               disabled={saving}
-              className="rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-50"
+              className="w-full rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-50 sm:w-auto sm:py-2.5"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-violet-400 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-violet-400 disabled:opacity-50 sm:w-auto sm:py-2.5"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving ? (module === "transfers" ? "Sending…" : "Saving…") : module === "transfers" ? "Send stock" : "Save"}
@@ -1722,7 +1733,7 @@ function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto bg-black/75 backdrop-blur-sm sm:items-center sm:p-4"
       onMouseDown={onClose}
       role="presentation"
     >
@@ -1733,7 +1744,7 @@ function Modal({
         aria-labelledby={labelledBy}
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
-        className={`max-h-[90vh] w-full ${maxWidth} overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl outline-none`}
+        className={`max-h-[96dvh] w-full ${maxWidth} overflow-y-auto rounded-t-3xl border border-slate-700 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl outline-none sm:max-h-[92dvh] sm:rounded-2xl sm:p-6`}
       >
         {children}
       </div>

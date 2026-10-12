@@ -1,5 +1,6 @@
 import { X, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ChoiceCards } from "./ChoiceCards";
 
 interface PaymentModalProps {
   paymentModalOpen: boolean;
@@ -43,8 +44,8 @@ export function PaymentModal({
   if (!paymentModalOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="flex max-h-[96dvh] w-full max-w-2xl flex-col overflow-y-auto rounded-t-3xl border border-slate-800 bg-slate-900 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[92dvh] sm:rounded-3xl sm:p-6">
         <div className="flex justify-between items-center mb-6">
           <h3 className="font-bold text-xl text-white">Payment Checkout</h3>
           <button
@@ -66,17 +67,22 @@ export function PaymentModal({
             <input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} className="accent-sky-500" />
             Split payment across two methods
           </label>
-          {split && <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950 p-3">
+          {split && <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:grid-cols-2">
             <label className="text-xs text-slate-400">First amount (MMK)
               <input type="number" min="0.01" max={total} step="0.01" value={firstPaymentAmount} onChange={(event) => setFirstPaymentAmount(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
               <span className="mt-1 block text-[10px]">{paymentMethod.toUpperCase()}</span>
             </label>
-            <label className="text-xs text-slate-400">Remaining ({remainingAmount.toLocaleString()} MMK)
-              <select value={secondMethod} onChange={(event) => setSecondMethod(event.target.value as typeof secondMethod)} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
-                {(["cash", "kpay", "wave", "card"] as const).filter((method) => method !== paymentMethod).map((method) => <option key={method} value={method}>{method.toUpperCase()}</option>)}
-              </select>
-              <span className="mt-1 block text-[10px]">Applied automatically</span>
-            </label>
+            <div className="text-xs text-slate-400">
+              <ChoiceCards
+                label={`Payment method for remaining ${remainingAmount.toLocaleString()} MMK`}
+                value={secondMethod}
+                onChange={(method) => setSecondMethod(method as typeof secondMethod)}
+                options={(["cash", "kpay", "wave", "card"] as const)
+                  .filter((method) => method !== paymentMethod)
+                  .map((method) => ({ value: method, label: method.toUpperCase() }))}
+              />
+              <span className="mt-1 block text-[10px]">Remaining balance is assigned automatically.</span>
+            </div>
           </div>}
 
           {/* Payment Methods */}
@@ -84,7 +90,7 @@ export function PaymentModal({
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
               Select Method
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {(["cash", "kpay", "wave", "card"] as const).map((method) => (
                 <button
                   key={method}

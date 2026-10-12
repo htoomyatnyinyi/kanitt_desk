@@ -233,9 +233,7 @@ export function Sidebar({
     >
       <div className="mb-4 flex h-10 items-center justify-between px-1">
         <div className="flex items-center gap-2.5">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[12px] bg-gradient-to-br from-cyan-400 to-sky-600 text-base font-black text-slate-950 shadow-lg shadow-sky-500/20">
-            K
-          </div>
+          <img src="/kanitt-mark.svg" alt="Kanitt" className="h-9 w-9 shrink-0 rounded-[12px] shadow-lg shadow-sky-500/20" />
           {!isCompact && (
             <div className="hidden min-w-0 flex-1 md:block">
               {/* business organism name */}

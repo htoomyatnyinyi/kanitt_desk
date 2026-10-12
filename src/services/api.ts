@@ -128,8 +128,12 @@ class ApiService {
     return data.imageUrl as string;
   }
 
-  async getChatMessages(storeId: string) {
-    return this.request<{ messages: ChatMessage[] }>(`/tenant/chat/${encodeURIComponent(storeId)}/messages`);
+  async getChatMessages(storeId: string, afterId?: string, signal?: AbortSignal) {
+    const params = afterId ? `?afterId=${encodeURIComponent(afterId)}` : "";
+    return this.request<{ messages: ChatMessage[]; hasMore?: boolean }>(
+      `/tenant/chat/${encodeURIComponent(storeId)}/messages${params}`,
+      { signal },
+    );
   }
 
   async sendChatMessage(storeId: string, body: string) {

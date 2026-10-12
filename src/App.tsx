@@ -686,7 +686,6 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           userRole={userRole}
           storeId={selectedStore?.id}
           stores={stores}
-          allowedTransferStoreIds={allowedStoreIds}
           loading={isProductsLoading}
           onCreateProduct={(payload) => createCatalogProduct(payload).unwrap()}
           onCreateEntity={(section, payload) => {

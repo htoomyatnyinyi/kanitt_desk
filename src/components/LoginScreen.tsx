@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeOff, Store, Loader2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import {
   useLoginMutation,
   useResendVerificationCodeMutation,
@@ -100,7 +100,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         {/* Logo & Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-sky-500 to-emerald-400 shadow-2xl shadow-sky-500/30 mb-4">
-            <Store className="w-8 h-8 text-white" />
+            <img src="/kanitt-mark.svg" alt="Kanitt" className="h-12 w-12 rounded-xl" />
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight">KANITT POS</h1>
           <p className="text-slate-400 text-sm mt-1 font-medium">Desktop Pro — Sign in to your workspace</p>

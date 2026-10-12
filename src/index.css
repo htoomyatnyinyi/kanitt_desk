@@ -32,3 +32,33 @@
 .animate-in {
   animation: animate-in-keyframe 0.25s ease-out;
 }
+
+/* Keep every form dialog usable on short screens and touch devices. */
+@media (max-width: 639px) {
+  .fixed.inset-0:has(form),
+  .fixed.inset-0:has(> div > label) {
+    display: flex !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    overflow-y: auto !important;
+    padding: 0 !important;
+  }
+
+  .fixed.inset-0:has(form) form {
+    width: 100%;
+    max-height: 96dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 1.5rem 1.5rem 0 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .fixed.inset-0:has(> div > label) > div {
+    width: 100%;
+    max-height: 96dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 1.5rem 1.5rem 0 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}

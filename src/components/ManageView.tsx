@@ -25,6 +25,7 @@ import QRCode from "qrcode";
 import { Product } from "../types";
 import { apiService, resolveMediaUrl } from "../services/api";
 import { SearchableProductPicker } from "./SearchableProductPicker";
+import { ChoiceCards } from "./ChoiceCards";
 
 type Section =
   | "products"
@@ -1387,14 +1388,14 @@ export function ManageView(props: Props) {
 
       {dialog && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/75 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) setDialog(null);
           }}
         >
           <form
             onSubmit={submit}
-            className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl transition-all duration-300 ${(dialog === "create" || dialog === "edit") && section === "products" ? "max-w-2xl" : "max-w-xl"}`}
+            className={`max-h-[96dvh] w-full overflow-y-auto rounded-t-3xl border border-slate-700 bg-slate-900 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl transition-all duration-300 sm:max-h-[92dvh] sm:rounded-2xl ${(dialog === "create" || dialog === "edit") && section === "products" ? "max-w-6xl" : dialog === "stock" ? "max-w-3xl" : "max-w-4xl"}`}
             style={{ padding: 0 }}
           >
             {/* ——— Wizard Header for product dialogs ——— */}
@@ -1515,33 +1516,19 @@ export function ManageView(props: Props) {
                     }));
                   }}
                 />
-                {props.products.find(
-                  (product) => product.id === stockFields.productId,
-                )?.variants?.length ? (
-                  <label className="block text-xs text-slate-400">
-                    Option
-                    <select
-                      required
-                      value={stockFields.variantId}
-                      onChange={(event) =>
-                        setStockFields((current) => ({
-                          ...current,
-                          variantId: event.target.value,
-                        }))
-                      }
-                      className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
-                    >
-                      <option value="" disabled>Select an option</option>
-                      {props.products
-                        .find((product) => product.id === stockFields.productId)
-                        ?.variants?.map((variant) => (
-                          <option key={variant.id} value={variant.id}>
-                            {variant.name} · {variant.stock ?? 0} on hand
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                ) : null}
+                {!!props.products.find((product) => product.id === stockFields.productId)?.variants?.length && (
+                  <ChoiceCards
+                    label="Choose product option"
+                    value={stockFields.variantId}
+                    onChange={(variantId) => setStockFields((current) => ({ ...current, variantId }))}
+                    options={(props.products.find((product) => product.id === stockFields.productId)?.variants ?? []).map((variant) => ({
+                      value: variant.id,
+                      label: variant.name,
+                      description: `${Number(variant.stock ?? 0).toLocaleString()} units on hand in this store`,
+                      badge: variant.sku,
+                    }))}
+                  />
+                )}
                 {stockVariant && (
                   <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
                     <p className="text-[11px] text-slate-400">This store · {stockVariant.name}</p>
@@ -1551,24 +1538,17 @@ export function ManageView(props: Props) {
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="text-xs text-slate-400">
-                    Change
-                    <select
-                      value={stockFields.mode}
-                      onChange={(event) =>
-                        setStockFields((current) => ({
-                          ...current,
-                          mode: event.target.value,
-                        }))
-                      }
-                      className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
-                    >
-                      <option value="IN">Add stock</option>
-                      <option value="OUT">Remove stock</option>
-                    </select>
-                  </label>
-                  <label className="text-xs text-slate-400">
+                <div className="space-y-3">
+                  <ChoiceCards
+                    label="Adjustment"
+                    value={stockFields.mode}
+                    onChange={(mode) => setStockFields((current) => ({ ...current, mode }))}
+                    options={[
+                      { value: "IN", label: "Add stock", description: "Physical count is higher than the system." },
+                      { value: "OUT", label: "Remove stock", description: "Damage, expiry, or a count correction." },
+                    ]}
+                  />
+                  <label className="block text-xs text-slate-400">
                     Units
                     <input
                       type="number"
@@ -1604,21 +1584,18 @@ export function ManageView(props: Props) {
                 </label>
                 <p className="text-[11px] leading-relaxed text-slate-500">Use a purchase order to receive supplier deliveries. This form is for stock corrections and losses.</p>
                 {stockFields.mode === "OUT" && (
-                  <label className="block text-xs text-slate-400">
-                    Stock-out reason type
-                    <select
+                  <div>
+                    <ChoiceCards
+                      label="Reason type"
                       value={stockFields.movementType}
-                      onChange={(event) => setStockFields((current) => ({
-                        ...current,
-                        movementType: event.target.value as "ADJUSTMENT" | "DAMAGE" | "EXPIRED",
-                      }))}
-                      className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
-                    >
-                      <option value="ADJUSTMENT">Correction</option>
-                      <option value="DAMAGE">Damaged stock</option>
-                      <option value="EXPIRED">Expired stock</option>
-                    </select>
-                  </label>
+                      onChange={(movementType) => setStockFields((current) => ({ ...current, movementType: movementType as "ADJUSTMENT" | "DAMAGE" | "EXPIRED" }))}
+                      options={[
+                        { value: "ADJUSTMENT", label: "Count correction" },
+                        { value: "DAMAGE", label: "Damaged" },
+                        { value: "EXPIRED", label: "Expired" },
+                      ]}
+                    />
+                  </div>
                 )}
               </div>
             ) : section === "products" ? (
