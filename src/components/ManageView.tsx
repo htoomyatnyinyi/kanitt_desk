@@ -236,6 +236,11 @@ export function ManageView(props: Props) {
   const selectedProduct =
     props.products.find((product) => product.id === selectedQrProduct) ??
     props.products[0];
+  const stockProduct = props.products.find((product) => product.id === stockFields.productId);
+  const stockVariant = stockProduct?.variants?.find((variant) => variant.id === stockFields.variantId);
+  const currentStock = Number(stockVariant?.stock ?? 0);
+  const enteredStockDelta = Number(stockFields.quantity || 0) * (stockFields.mode === "OUT" ? -1 : 1);
+  const resultingStock = currentStock + enteredStockDelta;
   const activeSection =
     section === "stock" ? "products" : section === "qr" ? "products" : section;
   const rows = listFor(activeSection, props);
@@ -521,6 +526,8 @@ export function ManageView(props: Props) {
           throw new Error(
             "Choose a product option, enter a positive whole quantity, and add a reason.",
           );
+        if (resultingStock < 0)
+          throw new Error("You cannot remove more stock than this option currently has.");
         await props.onAdjustStock(
           stockFields.productId,
           stockFields.variantId || undefined,
@@ -1544,9 +1551,18 @@ export function ManageView(props: Props) {
                     </select>
                   </label>
                 ) : null}
+                {stockVariant && (
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3">
+                    <p className="text-[11px] text-slate-400">This store · {stockVariant.name}</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-200">On hand</span>
+                      <span className="text-sm font-bold text-white">{currentStock} <span className="text-slate-500">→</span> <span className={resultingStock < 0 ? "text-rose-300" : "text-sky-300"}>{resultingStock}</span></span>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-xs text-slate-400">
-                    Adjustment
+                    Change
                     <select
                       value={stockFields.mode}
                       onChange={(event) =>
@@ -1562,7 +1578,7 @@ export function ManageView(props: Props) {
                     </select>
                   </label>
                   <label className="text-xs text-slate-400">
-                    Quantity
+                    Units
                     <input
                       type="number"
                       min="1"
@@ -1580,7 +1596,7 @@ export function ManageView(props: Props) {
                   </label>
                 </div>
                 <label className="block text-xs text-slate-400">
-                  Reason
+                  Why is stock changing?
                   <input
                     required
                     minLength={3}
@@ -1591,10 +1607,11 @@ export function ManageView(props: Props) {
                         reason: event.target.value,
                       }))
                     }
-                    placeholder="e.g. Received supplier delivery"
+                    placeholder="e.g. Count correction or damaged units"
                     className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
                   />
                 </label>
+                <p className="text-[11px] leading-relaxed text-slate-500">Use a purchase order to receive supplier deliveries. This form is for stock corrections and losses.</p>
                 {stockFields.mode === "OUT" && (
                   <label className="block text-xs text-slate-400">
                     Stock-out reason type

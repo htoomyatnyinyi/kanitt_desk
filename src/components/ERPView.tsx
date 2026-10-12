@@ -131,7 +131,7 @@ const PAYMENT_METHODS = [
 ];
 
 const RECEIVABLE_STATUSES = ["ORDERED", "APPROVED", "PARTIALLY_RECEIVED"];
-const COMPLETABLE_TRANSFER_STATUSES = ["PENDING", "APPROVED", "IN_TRANSIT"];
+const RECEIVABLE_TRANSFER_STATUSES = ["PENDING", "APPROVED", "IN_TRANSIT"];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -173,7 +173,15 @@ const dateText = (value?: string) =>
 const amount = (value: unknown) => `${Number(value || 0).toLocaleString()} MMK`;
 
 const transferStatusLabel = (status: string) =>
-  status === "RECEIVED" ? "COMPLETED" : status;
+  status === "RECEIVED"
+    ? "Received"
+    : status === "IN_TRANSIT"
+      ? "On the way"
+      : status === "PENDING"
+        ? "Awaiting dispatch"
+        : status === "APPROVED"
+          ? "Ready to send"
+          : status;
 
 /** Safe accessor for variant arrays on a product. */
 const getVariants = (product: Product | undefined): any[] => {
@@ -490,7 +498,7 @@ export function ERPView(props: Props) {
             },
           ],
         });
-        pushToast("success", "Transfer requested.");
+        pushToast("success", "Stock sent. The destination store can confirm receipt.");
       } else if (module === "returns") {
         if (!selectedOrder || !orderItem)
           throw new Error("Choose a completed order and an item to return.");
@@ -621,7 +629,7 @@ export function ERPView(props: Props) {
       await onCompleteTransfer(transferTarget.id);
       pushToast(
         "success",
-        `Transfer ${transferTarget.transferNumber} completed. Inventories have been updated.`,
+        `Transfer ${transferTarget.transferNumber} received. Destination stock has been updated.`,
       );
       setTransferTarget(null);
     } catch (cause) {
@@ -922,8 +930,8 @@ export function ERPView(props: Props) {
                             {transferStatusLabel(record.status)}
                           </span>
                           <span>
-                            {COMPLETABLE_TRANSFER_STATUSES.includes(record.status) &&
-                            (userRole !== "MANAGER" || record.toStoreId === selectedStoreId) ? (
+                            {RECEIVABLE_TRANSFER_STATUSES.includes(record.status) &&
+                            (userRole === "SUPER_ADMIN" || record.toStoreId === selectedStoreId) ? (
                               <button
                                 type="button"
                                 onClick={() => openCompleteTransfer(record)}
@@ -936,11 +944,15 @@ export function ERPView(props: Props) {
                                 {busyId === `transfer:${record.id}` && (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 )}
-                                Accept &amp; Complete
+                                Receive stock
                               </button>
                             ) : (
                               <span className="text-[11px] font-medium text-slate-400">
-                                {record.status === "RECEIVED" ? "✓ Received" : "Awaiting destination store"}
+                                {record.status === "RECEIVED"
+                                  ? "✓ Received"
+                                  : record.status === "IN_TRANSIT"
+                                    ? "Sent · awaiting receipt"
+                                    : "Awaiting dispatch"}
                               </span>
                             )}
                           </span>
@@ -1108,8 +1120,9 @@ export function ERPView(props: Props) {
               </h2>
             </div>
             <p className="text-xs text-slate-300">
-              Confirm receiving and applying this stock transfer between
-              branches.
+                Confirm the full shipment arrived. Stock is added to this
+                store only after you receive it. Record any shortage or damage
+                as a stock adjustment afterward.
             </p>
 
             <div className="mt-4 space-y-2 rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs">
@@ -1209,7 +1222,7 @@ export function ERPView(props: Props) {
                   : module === "supplierPayments"
                     ? "Record supplier payment"
                     : module === "transfers"
-                      ? "Request stock transfer"
+                      ? "Send stock"
                       : "Process sales return"}
           </h2>
           <p className="mb-5 mt-1 text-xs text-slate-400">
@@ -1404,6 +1417,7 @@ export function ERPView(props: Props) {
             </div>
           ) : module === "transfers" ? (
             <div className="space-y-3">
+              <p className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs leading-relaxed text-sky-200">Sending deducts stock from the source store. The destination adds it to stock after confirming delivery.</p>
               <p className="text-xs text-slate-400">
                 Source store:{" "}
                 <strong className="text-white">
