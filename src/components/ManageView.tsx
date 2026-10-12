@@ -16,6 +16,7 @@ import {
   Plus,
   Printer,
   RotateCcw,
+  Store as StoreIcon,
   Tags,
   Truck,
   Users,
@@ -30,6 +31,7 @@ import { ChoiceCards } from "./ChoiceCards";
 type Section =
   | "products"
   | "stock"
+  | "stores"
   | "staff"
   | "brands"
   | "categories"
@@ -44,6 +46,7 @@ const sections: { id: Section; title: string; icon: typeof PackagePlus }[] = [
   { id: "products", title: "Products", icon: Box },
   { id: "stock", title: "Stock adjustment", icon: RotateCcw },
   { id: "staff", title: "Staff", icon: Users },
+  { id: "stores", title: "Stores", icon: StoreIcon },
   { id: "brands", title: "Brands", icon: Tags },
   { id: "categories", title: "Categories", icon: Building2 },
   { id: "suppliers", title: "Suppliers", icon: Truck },
@@ -60,7 +63,7 @@ interface Props {
   staff: any[];
   userRole?: string;
   storeId?: string;
-  stores: { id: string; name: string }[];
+  stores: { id: string; name: string; code?: string; address?: string; phone?: string; email?: string; taxNumber?: string; isActive?: boolean }[];
   loading: boolean;
   onCreateProduct: (payload: Record<string, unknown>) => Promise<unknown>;
   onCreateEntity: (
@@ -106,6 +109,14 @@ const formFields: Record<
   { name: string; label: string; type?: string; required?: boolean }[]
 > = {
   products: [],
+  stores: [
+    { name: "name", label: "Store name", required: true },
+    { name: "code", label: "Store code", required: true },
+    { name: "address", label: "Address" },
+    { name: "phone", label: "Phone" },
+    { name: "email", label: "Email", type: "email" },
+    { name: "taxNumber", label: "Tax number" },
+  ],
   staff: [
     { name: "name", label: "Full name", required: true },
     { name: "username", label: "Username", required: true },
@@ -157,6 +168,7 @@ const formFields: Record<
 const listFor = (section: EntitySection, props: Props): any[] =>
   ({
     products: props.products,
+    stores: props.stores,
     staff: props.staff,
     brands: props.brands,
     categories: props.categories,
@@ -165,6 +177,7 @@ const listFor = (section: EntitySection, props: Props): any[] =>
   })[section];
 const labels: Record<EntitySection, string> = {
   products: "Product",
+  stores: "Store",
   staff: "Staff member",
   brands: "Brand",
   categories: "Category",
@@ -1030,21 +1043,28 @@ export function ManageView(props: Props) {
       </header>
 
       <nav className="mb-5 flex flex-wrap gap-2">
-        {sections.map(({ id, title, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => {
-              setSection(id);
-              setSearch("");
-              setNotice(null);
-              setError(null);
-            }}
-            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition ${section === id ? "border-sky-400/50 bg-sky-400/10 text-sky-200" : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"}`}
-          >
-            <Icon className="h-4 w-4" />
-            {title}
-          </button>
-        ))}
+        {sections
+          .filter(
+            ({ id }) =>
+              id !== "stores" ||
+              props.userRole === "ADMIN" ||
+              props.userRole === "SUPER_ADMIN",
+          )
+          .map(({ id, title, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => {
+                setSection(id);
+                setSearch("");
+                setNotice(null);
+                setError(null);
+              }}
+              className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-bold transition ${section === id ? "border-sky-400/50 bg-sky-400/10 text-sky-200" : "border-slate-800 bg-slate-900 text-slate-400 hover:text-white"}`}
+            >
+              <Icon className="h-4 w-4" />
+              {title}
+            </button>
+          ))}
       </nav>
 
       {error && !dialog && (
@@ -1257,12 +1277,20 @@ export function ManageView(props: Props) {
               <span>
                 {section === "products"
                   ? "SKU / barcode"
-                  : section === "staff"
-                    ? "Role"
-                    : "Contact"}
+                  : section === "stores"
+                    ? "Store code"
+                    : section === "staff"
+                      ? "Role"
+                      : "Contact"}
               </span>
-              <span>{section === "products" ? "Price" : "Code / status"}</span>
-              <span>Details</span>
+              <span>
+                {section === "products"
+                  ? "Price"
+                  : section === "stores"
+                    ? "Status"
+                    : "Code / status"}
+              </span>
+              <span>{section === "stores" ? "Address / phone" : "Details"}</span>
             </div>
             {paginatedRows.map((item: any) => (
               <div
@@ -1302,18 +1330,26 @@ export function ManageView(props: Props) {
                 <span className="truncate font-mono text-xs text-slate-400">
                   {section === "products"
                     ? `${item.sku || "—"} · ${item.barcode || "—"}`
-                    : section === "staff"
-                      ? item.role
-                      : item.email || item.phone || item.contactName || "—"}
+                    : section === "stores"
+                      ? item.code || "—"
+                      : section === "staff"
+                        ? item.role
+                        : item.email || item.phone || item.contactName || "—"}
                 </span>
                 <span className="truncate text-xs text-slate-400">
                   {section === "products"
                     ? `${Number(item.price).toLocaleString()} MMK · ${item.variants?.length ?? 0} options`
-                    : item.code ||
-                      (item.isActive === false ? "Inactive" : "Active")}
+                    : section === "stores"
+                      ? item.isActive === false
+                        ? "Inactive"
+                        : "Active"
+                      : item.code ||
+                        (item.isActive === false ? "Inactive" : "Active")}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {item._count?.products ?? item.storeName ?? "—"}
+                  {section === "stores"
+                    ? item.address || item.phone || "—"
+                    : item._count?.products ?? item.storeName ?? "—"}
                 </span>
                 <button
                   onClick={() => openEdit(item)}

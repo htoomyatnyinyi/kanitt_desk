@@ -3,6 +3,8 @@ import {
   useGetHealthQuery,
   useGetProductsQuery,
   useGetStoresQuery,
+  useCreateStoreMutation,
+  useUpdateStoreMutation,
   useGetSessionsQuery,
   useCreateOrderMutation,
   useQuoteOrderMutation,
@@ -260,6 +262,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [createSupplier] = useCreateSupplierMutation();
   const [createCustomer] = useCreateCustomerMutation();
   const [createStaff] = useCreateStaffMutation();
+  const [createStore] = useCreateStoreMutation();
+  const [updateStore] = useUpdateStoreMutation();
   const [adjustStock] = useAdjustStockMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
@@ -712,6 +716,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           onCreateProduct={(payload) => createCatalogProduct(payload).unwrap()}
           onCreateEntity={(section, payload) => {
             if (section === "staff") return createStaff(payload).unwrap();
+            if (section === "stores") return createStore(payload).unwrap();
             if (section === "brands")
               return createBrand(
                 payload as { name: string; description?: string },
@@ -729,6 +734,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               return updateCatalogProduct({ id, patch: payload }).unwrap();
             if (section === "staff")
               return updateStaff({ id, patch: payload }).unwrap();
+            if (section === "stores")
+              return updateStore({ id, patch: payload }).unwrap();
             if (section === "brands")
               return updateBrand({ id, patch: payload }).unwrap();
             if (section === "categories")

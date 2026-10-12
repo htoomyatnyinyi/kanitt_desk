@@ -707,6 +707,20 @@ export const kanittApi = createApi({
       transformResponse: (res: any) => unwrapList(res, "stores"),
       providesTags: ["Stores"],
     }),
+    createStore: builder.mutation<Store, Record<string, unknown>>({
+      query: (body) => ({ url: "/tenant/stores", method: "POST", body }),
+      transformResponse: (res: any) => res?.store ?? res,
+      invalidatesTags: ["Stores"],
+    }),
+    updateStore: builder.mutation<Store, { id: string; patch: Record<string, unknown> }>({
+      query: ({ id, patch }) => ({
+        url: `/tenant/stores/${id}`,
+        method: "PUT",
+        body: patch,
+      }),
+      transformResponse: (res: any) => res?.store ?? res,
+      invalidatesTags: ["Stores"],
+    }),
 
     // Sessions
     getSessions: builder.query<Session[], { storeId?: string }>({
@@ -1003,6 +1017,8 @@ export const {
   useGetWalletsQuery,
   useCreateWalletTransactionMutation,
   useGetStoresQuery,
+  useCreateStoreMutation,
+  useUpdateStoreMutation,
   useGetSessionsQuery,
   useGetOrdersQuery,
   useOpenSessionMutation,
