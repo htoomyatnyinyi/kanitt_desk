@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   BadgePercent,
+  Bell,
   BarChart3,
   BriefcaseBusiness,
   Boxes,
@@ -13,6 +14,7 @@ import {
   LogOut,
   ReceiptText,
   RefreshCw,
+  ClipboardCheck,
   Settings2,
   ShieldCheck,
   ShoppingBag,
@@ -23,13 +25,15 @@ import {
 } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
 import { decodeAuthToken } from "../services/secureStorage";
-import { useGetStockRequestsQuery } from "../store/apiSlice";
+import { useGetNotificationUnreadCountQuery, useGetStockRequestsQuery } from "../store/apiSlice";
 
 export type Tab =
   | "dashboard"
   | "pos"
   | "orders"
   | "inventory"
+  | "requests"
+  | "notifications"
   | "sessions"
   | "manage"
   | "erp"
@@ -112,6 +116,7 @@ const groups: {
     items: [
       { id: "orders", label: "Orders & returns", icon: ReceiptText },
       { id: "inventory", label: "Inventory", icon: Boxes },
+      { id: "requests", label: "Stock requests", icon: ClipboardCheck },
       { id: "sessions", label: "Register sessions", icon: Clock3 },
     ],
   },
@@ -161,6 +166,7 @@ const groups: {
         icon: ShieldCheck,
         roles: ["ADMIN", "SUPER_ADMIN"],
       },
+      { id: "notifications", label: "Notifications", icon: Bell },
       { id: "sync", label: "Sync status", icon: Cloud },
       {
         id: "settings",
@@ -191,6 +197,7 @@ export function Sidebar({
     pollingInterval: 15000,
     skip: (!selectedStore?.id && !["ADMIN", "SUPER_ADMIN"].includes(userRole)) || userRole === "ACCOUNTANT",
   });
+  const { data: unreadNotifications = 0 } = useGetNotificationUnreadCountQuery(undefined, { pollingInterval: 30000 });
   const openStockRequestCount = visibleStockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).length;
 
   const isCompact = collapsed;
@@ -368,9 +375,14 @@ export function Sidebar({
                       {!isCompact && (
                         <span className="hidden flex-1 truncate md:block">{label}</span>
                       )}
-                      {id === "inventory" && openStockRequestCount > 0 && (
+                      {id === "requests" && openStockRequestCount > 0 && (
                         <span className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`} aria-label={`${openStockRequestCount} open stock requests`}>
                           {openStockRequestCount > 99 ? "99+" : openStockRequestCount}
+                        </span>
+                      )}
+                      {id === "notifications" && unreadNotifications > 0 && (
+                        <span className={`grid min-h-5 min-w-5 place-items-center rounded-full bg-sky-400 px-1 text-[9px] font-black text-slate-950 ${isCompact ? "absolute -right-1 -top-1" : ""}`} aria-label={`${unreadNotifications} unread notifications`}>
+                          {unreadNotifications > 99 ? "99+" : unreadNotifications}
                         </span>
                       )}
                     </button>

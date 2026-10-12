@@ -2,14 +2,13 @@ import { FormEvent, useState } from "react";
 import { Bell, BellOff, Building2, Check, ChevronLeft, ChevronRight, ClipboardCopy, CreditCard, Eye, EyeOff, Key, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { useGetTenantProfileQuery, useUpdateTenantProfileMutation, useGetStoreSettingsQuery, useUpsertStoreSettingMutation, useDeleteStoreSettingMutation, useGetApiKeysQuery, useCreateApiKeyMutation, useRevokeApiKeyMutation, useGetSubscriptionQuery, useGetNotificationsQuery, useMarkNotificationReadMutation, useMarkAllNotificationsReadMutation, useDeleteNotificationMutation, useGetStaffQuery } from "../store/apiSlice";
 
-type Module = "profile" | "users" | "store-settings" | "api-keys" | "subscription" | "notifications";
+type Module = "profile" | "users" | "store-settings" | "api-keys" | "subscription";
 const modules: { id: Module; label: string; caption: string; icon: typeof Settings2 }[] = [
   { id: "profile", label: "Business profile", caption: "Org name, email, phone", icon: Building2 },
   { id: "users", label: "Staff & users", caption: "User roles & access", icon: Users },
   { id: "store-settings", label: "Store settings", caption: "Per-store config keys", icon: Settings2 },
   { id: "api-keys", label: "API keys", caption: "Integrations & tokens", icon: Key },
   { id: "subscription", label: "Subscription", caption: "Plan & billing history", icon: CreditCard },
-  { id: "notifications", label: "Notifications", caption: "Inbox & alerts", icon: Bell },
 ];
 const inputCls = "w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-sky-400";
 const btnPrimary = "inline-flex items-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-sky-300 disabled:opacity-50";
@@ -233,7 +232,7 @@ export function AdminView({ stores, currentUserId }: AdminViewProps) {
         <header>
           <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-violet-300">System administration</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-white">Admin workspace</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-400">Manage your business profile, store configuration, API integrations, subscription plan, and notification inbox.</p>
+          <p className="mt-2 max-w-2xl text-sm text-slate-400">Manage your business profile, store configuration, API integrations, and subscription plan.</p>
         </header>
         <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
           {modules.map(({ id, label, caption, icon: Icon }) => (
@@ -254,9 +253,16 @@ export function AdminView({ stores, currentUserId }: AdminViewProps) {
           {module === "store-settings" && <StoreSettingsPanel stores={stores} />}
           {module === "api-keys" && <ApiKeysPanel currentUserId={currentUserId} />}
           {module === "subscription" && <SubscriptionPanel />}
-          {module === "notifications" && <NotificationsPanel />}
         </section>
       </div>
+    </main>
+  );
+}
+
+export function NotificationsView() {
+  return (
+    <main className="min-w-0 flex-1 overflow-y-auto bg-[#0b1220] p-4 text-slate-100 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-5xl"><NotificationsPanel /></div>
     </main>
   );
 }

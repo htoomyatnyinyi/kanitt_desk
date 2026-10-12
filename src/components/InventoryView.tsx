@@ -17,9 +17,9 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Product } from "../types";
-import { useCreateStockRequestMutation, useGetStockRequestsQuery, useUpdateStockRequestMutation, useCreateStockTransferMutation, useCompleteStockTransferMutation, Store as ApiStore } from "../store/apiSlice";
+import { useCreateStockRequestMutation, useGetStockRequestsQuery } from "../store/apiSlice";
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                             */
@@ -123,20 +123,16 @@ interface InventoryViewProps {
   products: Product[];
   storeId?: string;
   userRole?: string;
-  userPermissions?: string[];
   isLoading?: boolean;
-  stores?: ApiStore[];
-  allowedTransferStoreIds?: string[];
+  onRequestSubmitted?: () => void;
 }
 
 export function InventoryView({
   products,
   storeId,
   userRole = "CASHIER",
-  userPermissions = [],
   isLoading = false,
-  stores = [],
-  allowedTransferStoreIds = [],
+  onRequestSubmitted,
 }: InventoryViewProps) {
   const [query, setQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
@@ -148,45 +144,10 @@ export function InventoryView({
   const [requestTarget, setRequestTarget] = useState<Product | null>(null);
   const [requestQuantity, setRequestQuantity] = useState("1");
   const [requestReason, setRequestReason] = useState("");
-  const [transferTarget, setTransferTarget] = useState<any>(null);
-  const [transferSourceId, setTransferSourceId] = useState("");
   const requestQueryStoreId = ["ADMIN", "SUPER_ADMIN"].includes(userRole) ? undefined : storeId;
   const { data: stockRequests = [] } = useGetStockRequestsQuery({ storeId: requestQueryStoreId }, { pollingInterval: 15000, skip: !storeId && !["ADMIN", "SUPER_ADMIN"].includes(userRole) });
   const [createStockRequest, { isLoading: isRequesting }] = useCreateStockRequestMutation();
-  const [updateStockRequest] = useUpdateStockRequestMutation();
-  const [createStockTransfer, { isLoading: isCreatingTransfer }] = useCreateStockTransferMutation();
-  const [completeStockTransfer] = useCompleteStockTransferMutation();
-  const canReviewRequests = ["MANAGER", "ADMIN", "SUPER_ADMIN"].includes(userRole) && (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userPermissions.includes("MANAGE_INVENTORY"));
-  const transferSourceStores = ["ADMIN", "SUPER_ADMIN"].includes(userRole) ? stores : stores.filter((store) => allowedTransferStoreIds.includes(store.id));
   const canCreateRequests = ["CASHIER", "MANAGER"].includes(userRole);
-
-  const createRequestTransfer = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!transferTarget || !storeId || !transferSourceId) return;
-    try {
-      await createStockTransfer({
-        fromStoreId: transferSourceId,
-        toStoreId: transferTarget.storeId,
-        stockRequestId: transferTarget.id,
-        notes: `Requested for ${transferTarget.store?.name || "receiving store"}`,
-        items: [{ productId: transferTarget.productId, variantId: transferTarget.variantId, quantity: transferTarget.quantity }],
-      }).unwrap();
-      setTransferTarget(null);
-      setTransferSourceId("");
-    } catch (error: any) {
-      window.alert(error?.data?.message || "Could not create transfer. Check store access and source stock.");
-    }
-  };
-
-  const confirmRequestTransfer = async (request: any) => {
-    const transferId = request.reviewNote?.match(/stock-transfer:([^\s]+)/)?.[1];
-    if (!transferId || !window.confirm("Confirm the goods physically arrived? This posts the transfer to inventory and closes the request.")) return;
-    try {
-      await completeStockTransfer(transferId).unwrap();
-    } catch (error: any) {
-      window.alert(error?.data?.message || "Could not receive transfer.");
-    }
-  };
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -426,28 +387,6 @@ export function InventoryView({
           </button>
         </div>
       </div>
-
-      {storeId && stockRequests.length > 0 && (
-        <section className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div><h3 className="text-sm font-bold text-white">Stock requests &amp; updates</h3><p className="mt-0.5 text-[11px] text-slate-400">Your request status appears here after a manager reviews it. Requests do not change stock.</p></div>
-            <span className="rounded-full bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300">{stockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).length} open</span>
-          </div>
-          <div className="grid gap-2 lg:grid-cols-2">
-            {stockRequests.slice(0, 10).map((request: any) => (
-              <div key={request.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-100">{request.product?.name} · {request.variant?.name}</p><p className="mt-1 text-[10px] text-slate-400">{request.quantity} requested by {request.requestedBy?.name} · {request.status.toLowerCase()}</p>{request.reason && <p className="mt-1 text-[10px] text-slate-500">{request.reason}</p>}</div>
-                {request.reviewNote && <p className="mt-1 w-full text-[10px] text-sky-200">Manager update: {request.reviewNote.replace(/\s*stock-transfer:[^\s]+/g, "")}</p>}
-                {canReviewRequests && ["PENDING", "ACKNOWLEDGED"].includes(request.status) && <div className="flex flex-wrap gap-1.5">
-                  {!request.reviewNote?.includes("stock-transfer:") && (transferSourceStores.some((store) => store.id !== request.storeId) ? <button onClick={() => { setTransferTarget(request); setTransferSourceId(""); }} className="rounded-lg bg-sky-500 px-3 py-1.5 text-[10px] font-black text-slate-950">Create transfer</button> : <span className="self-center text-[10px] text-amber-300">Ask an administrator to transfer from another store</span>)}
-                  {!!request.reviewNote?.match(/stock-transfer:([^\s]+)/)?.[1] && <button onClick={() => confirmRequestTransfer(request)} className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-[10px] font-bold text-emerald-300">Confirm received</button>}
-                  {!request.reviewNote?.includes("stock-transfer:") && <button onClick={async () => { try { await updateStockRequest({ id: request.id, patch: { status: "REJECTED", reviewNote: "Request rejected by store manager." } }).unwrap(); } catch (error: any) { window.alert(error?.data?.message || "Could not update request."); } }} className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-[10px] font-bold text-rose-300">Reject</button>}
-                </div>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* KPI cards */}
       <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -822,7 +761,8 @@ export function InventoryView({
             try {
               const result = await createStockRequest({ storeId, productId: requestTarget.productId, variantId: requestTarget.variantId, quantity, reason: requestReason }).unwrap();
               setRequestTarget(null); setRequestReason("");
-              if (result?.duplicate) window.alert("A request for this variant is already open. You can follow its status in the Stock requests panel.");
+              if (result?.duplicate) window.alert("A request for this variant is already open. You can track it under Stock requests.");
+              onRequestSubmitted?.();
             } catch (error: any) { window.alert(error?.data?.message || "Could not submit stock request."); }
           }}>
             <h3 className="text-lg font-bold text-white">Request stock</h3>
@@ -830,22 +770,6 @@ export function InventoryView({
             <label className="mt-4 block text-xs font-semibold text-slate-300">Quantity needed<input autoFocus min="1" step="1" type="number" value={requestQuantity} onChange={(event) => setRequestQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500" /></label>
             <label className="mt-3 block text-xs font-semibold text-slate-300">Note (optional)<textarea value={requestReason} onChange={(event) => setRequestReason(event.target.value)} maxLength={500} rows={3} placeholder="Low stock, customer demand…" className="mt-1 w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500" /></label>
             <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setRequestTarget(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-white">Cancel</button><button disabled={isRequesting} className="rounded-xl bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">{isRequesting ? "Sending…" : "Send request"}</button></div>
-          </form>
-        </div>
-      )}
-      {transferTarget && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransferTarget(null); }}>
-          <form className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl" onSubmit={createRequestTransfer}>
-            <h3 className="text-lg font-bold text-white">Create stock transfer</h3>
-            <p className="mt-1 text-sm text-slate-400">{transferTarget.quantity} × {transferTarget.product?.name} · {transferTarget.variant?.name}</p>
-            <label className="mt-4 block text-xs font-semibold text-slate-300">Source store
-              <select required value={transferSourceId} onChange={(event) => setTransferSourceId(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white">
-                <option value="">Select source store</option>
-                {transferSourceStores.filter((store) => store.id !== transferTarget.storeId).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-              </select>
-            </label>
-            <p className="mt-3 text-[11px] text-slate-500">Stock is posted only after the receiving store confirms physical arrival.</p>
-            <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setTransferTarget(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400">Cancel</button><button disabled={!transferSourceId || isCreatingTransfer} className="rounded-xl bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">{isCreatingTransfer ? "Creating…" : "Create transfer"}</button></div>
           </form>
         </div>
       )}
