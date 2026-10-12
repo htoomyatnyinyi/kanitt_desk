@@ -268,9 +268,9 @@ export function PosView({
               onClick={() => variants.length > 0 && handleProductClick(product)}
               className={`group bg-slate-900/70 hover:bg-slate-900 border border-slate-800/80 hover:border-sky-500/50 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:shadow-sky-500/5 ${variantCount > 0 ? "cursor-pointer active:scale-[0.98]" : "opacity-50"}`}
             >
-              {product.image && (
+              {(product.imageUrl || product.image) && (
                 <img
-                  src={resolveMediaUrl(product.image)}
+                  src={resolveMediaUrl(product.imageUrl || product.image)}
                   alt=""
                   loading="lazy"
                   className="mb-3 aspect-4/3 w-full rounded-xl bg-slate-800 object-cover"

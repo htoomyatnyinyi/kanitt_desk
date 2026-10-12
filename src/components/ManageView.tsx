@@ -1269,10 +1269,18 @@ export function ManageView(props: Props) {
                 key={item.id}
                 className="grid grid-cols-[1.3fr_1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-800/70 px-5 py-3.5 last:border-0"
               >
-                <div className="min-w-0">
-                  <span className="truncate block text-sm font-semibold text-slate-100">
-                    {item.name}
-                  </span>
+                <div className="flex min-w-0 items-center gap-3">
+                  {section === "products" && (
+                    item.imageUrl || item.image ? (
+                      <img src={resolveMediaUrl(item.imageUrl || item.image)} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-lg bg-slate-800 object-cover" />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-500"><Package className="h-4 w-4" /></div>
+                    )
+                  )}
+                  <div className="min-w-0">
+                    <span className="truncate block text-sm font-semibold text-slate-100">
+                      {item.name}
+                    </span>
                   {section === "products" &&
                     (item.genericName ||
                       item.activeIngredient ||
@@ -1289,6 +1297,7 @@ export function ManageView(props: Props) {
                           .join(" · ")}
                       </span>
                     )}
+                  </div>
                 </div>
                 <span className="truncate font-mono text-xs text-slate-400">
                   {section === "products"

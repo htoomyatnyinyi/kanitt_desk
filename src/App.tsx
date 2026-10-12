@@ -101,7 +101,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const authUser = decodeAuthToken();
   const userRole = String(authUser?.role || "CASHIER").toUpperCase();
   const userPermissions = authUser?.permissions ?? [];
-  const allowedStoreIds = userRole === "CASHIER" ? authUser?.storeIds?.slice(0, 1) ?? [] : authUser?.storeIds ?? [];
+  const allowedStoreIds =
+    userRole === "CASHIER"
+      ? (authUser?.storeIds?.slice(0, 1) ?? [])
+      : (authUser?.storeIds ?? []);
   useEffect(() => {
     if (!canAccessTab(activeTab, userRole, userPermissions)) {
       setActiveTab(userRole === "ACCOUNTANT" ? "dashboard" : "pos");
@@ -194,9 +197,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     isLoading: isTransfersLoading,
     refetch: refetchTransfers,
   } = useGetStockTransfersQuery();
-  const { data: transferDestinationStores = [] } = useGetTransferDestinationStoresQuery(undefined, {
-    skip: !canAccessTab("erp", userRole, userPermissions),
-  });
+  const { data: transferDestinationStores = [] } =
+    useGetTransferDestinationStoresQuery(undefined, {
+      skip: !canAccessTab("erp", userRole, userPermissions),
+    });
   const {
     data: returns = [],
     isLoading: isReturnsLoading,
@@ -325,7 +329,12 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
 
   const stores = useMemo(() => {
     const available = apiStores || [];
-    if (userRole === "ADMIN" || userRole === "SUPER_ADMIN" || userRole === "ACCOUNTANT") return available;
+    if (
+      userRole === "ADMIN" ||
+      userRole === "SUPER_ADMIN" ||
+      userRole === "ACCOUNTANT"
+    )
+      return available;
     return available.filter((store) => allowedStoreIds.includes(store.id));
   }, [apiStores, userRole, allowedStoreIds.join("|")]);
 
@@ -381,7 +390,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     if (stores.length > 0 && !selectedStore) {
       setSelectedStore(stores[0]);
-    } else if (selectedStore && !stores.some((store) => store.id === selectedStore.id)) {
+    } else if (
+      selectedStore &&
+      !stores.some((store) => store.id === selectedStore.id)
+    ) {
       setSelectedStore(stores[0] ?? null);
     }
   }, [stores, selectedStore]);
@@ -616,8 +628,18 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       storeId: selectedStore?.id,
       storeAddress: selectedStore?.address,
       storePhone: selectedStore?.phone,
-      receiptHeader: String(apiStoreSettings.find((setting: any) => setting.settingKey === "receipt_header")?.settingValue || selectedStore?.name || "KANITT RETAIL"),
-      receiptFooter: String(apiStoreSettings.find((setting: any) => setting.settingKey === "receipt_footer")?.settingValue || "Thank you for shopping with us!"),
+      receiptHeader: String(
+        apiStoreSettings.find(
+          (setting: any) => setting.settingKey === "receipt_header",
+        )?.settingValue ||
+          selectedStore?.name ||
+          "KANITT RETAIL",
+      ),
+      receiptFooter: String(
+        apiStoreSettings.find(
+          (setting: any) => setting.settingKey === "receipt_footer",
+        )?.settingValue || "Thank you for shopping with us!",
+      ),
       allowAutoPrint: true,
       items: cart.map((item) => ({
         name: item.name,
@@ -715,7 +737,13 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               return updateSupplier({ id, patch: payload }).unwrap();
             return updateCustomer({ id, patch: payload }).unwrap();
           }}
-          onAdjustStock={(productId, variantId, quantity, reason, movementType) =>
+          onAdjustStock={(
+            productId,
+            variantId,
+            quantity,
+            reason,
+            movementType,
+          ) =>
             adjustStock({
               storeId: selectedStore!.id,
               productId,
@@ -790,8 +818,18 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       )}
       {activeTab === "admin" && <AdminView stores={stores} />}
       {activeTab === "notifications" && <NotificationsView />}
-      {activeTab === "chat" && <ChatView storeId={selectedStore?.id} storeName={selectedStore?.name} />}
-      {activeTab === "requests" && <StockRequestsView storeId={selectedStore?.id} stores={stores} userRole={userRole} userPermissions={userPermissions} allowedTransferStoreIds={allowedStoreIds} />}
+      {activeTab === "chat" && (
+        <ChatView storeId={selectedStore?.id} storeName={selectedStore?.name} />
+      )}
+      {activeTab === "requests" && (
+        <StockRequestsView
+          storeId={selectedStore?.id}
+          stores={stores}
+          userRole={userRole}
+          userPermissions={userPermissions}
+          allowedTransferStoreIds={allowedStoreIds}
+        />
+      )}
       {activeTab === "sync" && (
         <SyncView
           connected={isConnected}
@@ -898,7 +936,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           connected={isConnected}
           storeName={selectedStore?.name}
           storeId={selectedStore?.id}
-          canEditStoreSettings={["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(userRole)}
+          canEditStoreSettings={["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(
+            userRole,
+          )}
         />
       )}
 
