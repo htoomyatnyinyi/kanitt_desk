@@ -24,6 +24,7 @@ import {
 import QRCode from "qrcode";
 import { Product } from "../types";
 import { apiService, resolveMediaUrl } from "../services/api";
+import { SearchableProductPicker } from "./SearchableProductPicker";
 
 type Section =
   | "products"
@@ -1066,8 +1067,7 @@ export function ManageView(props: Props) {
         <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <h2 className="text-lg font-bold text-white">Adjust store stock</h2>
           <p className="mb-5 mt-1 text-sm text-slate-400">
-            Each adjustment is written to the server movement ledger with your
-            reason.
+            Search by product name, SKU or barcode. Updates apply to {props.stores.find((store) => store.id === props.storeId)?.name || "the selected store"} and are recorded in the stock movement history.
           </p>
           <button
             onClick={() => openStock()}
@@ -1502,28 +1502,19 @@ export function ManageView(props: Props) {
 
             {dialog === "stock" ? (
               <div className="space-y-4 px-6 py-5">
-                <label className="block text-xs text-slate-400">
-                  Product
-                  <select
-                    required
-                    value={stockFields.productId}
-                    onChange={(event) =>
-                      setStockFields((current) => ({
-                        ...current,
-                        productId: event.target.value,
-                        variantId: "",
-                      }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
-                  >
-                    <option value="">Choose product</option>
-                    {props.products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SearchableProductPicker
+                  products={props.products}
+                  value={stockFields.productId}
+                  placeholder="Search name, SKU or barcode…"
+                  onChange={(productId) => {
+                    const product = props.products.find((item) => item.id === productId);
+                    setStockFields((current) => ({
+                      ...current,
+                      productId,
+                      variantId: product?.variants?.length === 1 ? product.variants[0].id : "",
+                    }));
+                  }}
+                />
                 {props.products.find(
                   (product) => product.id === stockFields.productId,
                 )?.variants?.length ? (

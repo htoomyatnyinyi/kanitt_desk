@@ -24,6 +24,7 @@ import {
 import { ApiOrder } from "../store/apiSlice";
 import { Product } from "../types";
 import { WorkflowGuide } from "./WorkflowGuide";
+import { SearchableProductPicker } from "./SearchableProductPicker";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -228,6 +229,11 @@ export function ERPView(props: Props) {
 
   const [dialog, setDialog] = useState(false);
   const [fields, setFields] = useState<Fields>(initialFields);
+  const [transferItems, setTransferItems] = useState<Array<{
+    productId: string;
+    variantId: string;
+    quantity: number;
+  }>>([]);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -280,6 +286,11 @@ export function ERPView(props: Props) {
     (product) => product.id === fields.productId,
   );
   const selectedProductVariants = getVariants(selectedProduct);
+  const selectedVariant = selectedProductVariants.find((variant) => variant.id === fields.variantId);
+  const sourceOnHand = Number(selectedVariant?.availableStock ?? selectedVariant?.stock ?? 0);
+  const alreadyInTransfer = transferItems.find((item) => item.productId === fields.productId && item.variantId === fields.variantId)?.quantity ?? 0;
+  const sourceRemaining = Math.max(0, sourceOnHand - alreadyInTransfer);
+  const transferQuantity = Math.max(0, Math.floor(Number(fields.quantity) || 0));
   const selectedOrder = orders.find((order) => order.id === fields.orderId);
   const orderItem = selectedOrder?.items?.find(
     (item) => item.id === fields.orderItemId,
@@ -321,6 +332,12 @@ export function ERPView(props: Props) {
         item.store?.name,
         item.fromStore?.name,
         item.toStore?.name,
+        ...(item.items ?? []).flatMap((line: any) => [
+          line.product?.name,
+          line.product?.sku,
+          line.variant?.name,
+          line.variant?.sku,
+        ]),
         item.status,
         item.refundStatus,
       ])
@@ -379,6 +396,7 @@ export function ERPView(props: Props) {
     setSearch("");
     setStatusFilter("ALL");
     resetMessages();
+    setTransferItems([]);
   };
 
   const openDialog = () => {
@@ -389,15 +407,45 @@ export function ERPView(props: Props) {
       // Purchase order: default to the active store, first supplier, first product
       storeId: selectedStoreId || stores[0]?.id || "",
       supplierId: suppliers[0]?.id || "",
-      productId: firstProduct?.id || "",
-      variantId: getVariants(firstProduct)[0]?.id || "",
+      productId: module === "transfers" ? "" : firstProduct?.id || "",
+      variantId: module === "transfers" ? "" : getVariants(firstProduct)[0]?.id || "",
       categoryId: expenseCategories[0]?.id || "",
       toStoreId: transferDestinationStores.find((store) => store.id !== selectedStoreId)?.id || "",
       orderId: firstOrder?.id || "",
       orderItemId: firstOrder?.items?.[0]?.id || "",
     });
     resetMessages();
+    setTransferItems([]);
     setDialog(true);
+  };
+
+  const addTransferItem = () => {
+    const product = products.find((entry) => entry.id === fields.productId);
+    const variant = getVariants(product).find((entry) => entry.id === fields.variantId);
+    const itemQuantity = Math.floor(Number(fields.quantity));
+    if (!product || !variant || !Number.isInteger(itemQuantity) || itemQuantity < 1) {
+      setFormError("Choose a product option and enter a whole quantity to add it.");
+      return;
+    }
+    const available = Number(variant.availableStock ?? variant.stock ?? 0);
+    const existingQuantity = transferItems.find(
+      (item) => item.productId === product.id && item.variantId === variant.id,
+    )?.quantity ?? 0;
+    if (existingQuantity + itemQuantity > available) {
+      setFormError(`Only ${available} unit(s) of ${product.name} · ${variant.name} are at the source store.`);
+      return;
+    }
+    setTransferItems((current) => {
+      const index = current.findIndex(
+        (item) => item.productId === product.id && item.variantId === variant.id,
+      );
+      if (index < 0) return [...current, { productId: product.id, variantId: variant.id, quantity: itemQuantity }];
+      return current.map((item, itemIndex) => itemIndex === index
+        ? { ...item, quantity: item.quantity + itemQuantity }
+        : item);
+    });
+    setFormError("");
+    setFields((current) => ({ ...current, productId: "", variantId: "", quantity: "1" }));
   };
 
   const submit = async (event: FormEvent) => {
@@ -477,28 +525,26 @@ export function ERPView(props: Props) {
       } else if (module === "transfers") {
         if (!selectedStoreId)
           throw new Error("Select a source store from the top bar first.");
-        if (!fields.toStoreId || !fields.productId || quantity < 1) {
-          throw new Error("Choose a destination store, product, and quantity.");
+        if (!fields.toStoreId || transferItems.length === 0) {
+          throw new Error("Choose a destination store and add at least one item.");
         }
         if (fields.toStoreId === selectedStoreId)
           throw new Error("Source and destination stores must be different.");
-        const product = products.find(
-          (entry) => entry.id === fields.productId,
-        )!;
-        const variants = getVariants(product);
+        for (const item of transferItems) {
+          const product = products.find((entry) => entry.id === item.productId);
+          const variant = getVariants(product).find((entry) => entry.id === item.variantId);
+          if (!product || !variant) throw new Error("One of the selected product options is no longer available. Remove it and add it again.");
+          const available = Number(variant.availableStock ?? variant.stock ?? 0);
+          if (item.quantity > available) throw new Error(`Only ${available} unit(s) of ${product.name} · ${variant.name} remain at the source store.`);
+        }
         await onCreateTransfer({
           fromStoreId: selectedStoreId,
           toStoreId: fields.toStoreId,
           notes: fields.notes || undefined,
-          items: [
-            {
-              productId: product.id,
-              variantId: fields.variantId || variants[0]?.id || null,
-              quantity,
-            },
-          ],
+          items: transferItems,
         });
-        pushToast("success", "Stock sent. The destination store can confirm receipt.");
+        pushToast("success", `Sent ${transferItems.length} product option(s). The destination store can confirm receipt.`);
+        setTransferItems([]);
       } else if (module === "returns") {
         if (!selectedOrder || !orderItem)
           throw new Error("Choose a completed order and an item to return.");
@@ -1204,6 +1250,7 @@ export function ERPView(props: Props) {
       {/* ------------------------------------------------------------ */}
       <Modal
         open={dialog || categoryDialog}
+        maxWidth={module === "transfers" ? "max-w-2xl" : "max-w-xl"}
         onClose={() => {
           if (saving) return;
           setDialog(false);
@@ -1417,7 +1464,7 @@ export function ERPView(props: Props) {
             </div>
           ) : module === "transfers" ? (
             <div className="space-y-3">
-              <p className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs leading-relaxed text-sky-200">Sending deducts stock from the source store. The destination adds it to stock after confirming delivery.</p>
+              <p className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-xs leading-relaxed text-sky-200">Add all options to one shipment. Sending deducts source stock; the destination adds it after confirming delivery.</p>
               <p className="text-xs text-slate-400">
                 Source store:{" "}
                 <strong className="text-white">
@@ -1433,21 +1480,17 @@ export function ERPView(props: Props) {
                   .filter((item) => item.id !== selectedStoreId)
                   .map((item) => [item.id, item.name])}
               />
-              <Select
-                label="Product"
+              <SearchableProductPicker
+                products={products}
                 value={fields.productId}
                 onChange={(value) => {
                   const next = products.find((p) => p.id === value);
                   setFields({
                     ...fields,
                     productId: value,
-                    variantId: getVariants(next)[0]?.id || "",
+                    variantId: getVariants(next).length === 1 ? getVariants(next)[0].id : "",
                   });
                 }}
-                options={products.map((item) => [
-                  item.id,
-                  `${item.name} · ${item.sku}`,
-                ])}
               />
               {selectedProductVariants.length > 0 && (
                 <Select
@@ -1458,18 +1501,63 @@ export function ERPView(props: Props) {
                   }
                   options={selectedProductVariants.map((variant) => [
                     variant.id,
-                    variant.name,
+                    `${variant.name} · ${Number(variant.availableStock ?? variant.stock ?? 0).toLocaleString()} available`,
                   ])}
                 />
               )}
+              {selectedProduct && selectedProductVariants.length === 0 && (
+                <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">This product has no active options to transfer.</p>
+              )}
+              {selectedVariant && (
+                <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs">
+                  <span className="text-slate-400">At source · {selectedVariant.name}</span>
+                  <span className={`font-bold ${transferQuantity > sourceRemaining ? "text-rose-300" : "text-white"}`}>
+                    {sourceOnHand.toLocaleString()} available to send
+                    {alreadyInTransfer > 0 && ` · ${alreadyInTransfer} in shipment`}
+                    {transferQuantity > 0 && ` · ${Math.max(0, sourceOnHand - alreadyInTransfer - transferQuantity).toLocaleString()} left`}
+                  </span>
+                </div>
+              )}
               <Field
-                label="Quantity"
+                label="Units to add"
                 type="number"
                 min="1"
+                max={sourceOnHand}
                 value={fields.quantity}
                 onChange={(value) => setFields({ ...fields, quantity: value })}
-                required
               />
+              <button
+                type="button"
+                onClick={addTransferItem}
+                disabled={!selectedProduct || !selectedVariant || transferQuantity < 1 || transferQuantity > sourceRemaining}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-3 text-sm font-bold text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plus className="h-4 w-4" /> Add option to shipment
+              </button>
+              {transferItems.length > 0 && (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                  <div className="mb-2 flex items-center justify-between text-xs">
+                    <span className="font-bold text-white">Shipment items</span>
+                    <span className="text-slate-500">{transferItems.length} options · {transferItems.reduce((sum, item) => sum + item.quantity, 0)} units</span>
+                  </div>
+                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                    {transferItems.map((item) => {
+                      const product = products.find((entry) => entry.id === item.productId);
+                      const variant = getVariants(product).find((entry) => entry.id === item.variantId);
+                      return (
+                        <div key={`${item.productId}:${item.variantId}`} className="flex items-center gap-3 rounded-lg bg-white/[0.03] px-3 py-2">
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-semibold text-slate-200">{product?.name || "Product"} · {variant?.name || "Option"}</span>
+                            <span className="block text-[10px] text-slate-500">{product?.sku || ""}</span>
+                          </span>
+                          <span className="shrink-0 text-xs font-bold text-white">× {item.quantity}</span>
+                          <button type="button" aria-label={`Remove ${product?.name || "item"}`} onClick={() => setTransferItems((current) => current.filter((entry) => entry.productId !== item.productId || entry.variantId !== item.variantId))} className="rounded-md p-1.5 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <Field
                 label="Notes"
                 value={fields.notes}
@@ -1572,7 +1660,7 @@ export function ERPView(props: Props) {
               className="flex items-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-violet-400 disabled:opacity-50"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? "Saving…" : "Save"}
+              {saving ? (module === "transfers" ? "Sending…" : "Saving…") : module === "transfers" ? "Send stock" : "Save"}
             </button>
           </div>
         </form>
