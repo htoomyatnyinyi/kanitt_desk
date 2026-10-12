@@ -163,8 +163,22 @@ export const kanittApi = createApi({
     "ApiKeys",
     "Subscription",
     "Notifications",
+    "StockRequests",
   ],
   endpoints: (builder) => ({
+    getStockRequests: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId }) => ({ url: "/tenant/stock-requests", params: storeId ? { storeId } : {} }),
+      transformResponse: (r: any) => r?.requests ?? [],
+      providesTags: ["StockRequests"],
+    }),
+    createStockRequest: builder.mutation<any, Record<string, unknown>>({
+      query: (body) => ({ url: "/tenant/stock-requests", method: "POST", body }),
+      invalidatesTags: ["StockRequests", "Notifications"],
+    }),
+    updateStockRequest: builder.mutation<any, { id: string; patch: Record<string, unknown> }>({
+      query: ({ id, patch }) => ({ url: `/tenant/stock-requests/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: ["StockRequests", "Notifications"],
+    }),
     // Health Check
     getHealth: builder.query<
       { success: boolean; status: string; service: string },
@@ -205,6 +219,9 @@ export const kanittApi = createApi({
             ? p.inventories.map((inventory: any) => ({
                 variantId: inventory.variantId,
                 quantity: Number(inventory.quantity) || 0,
+              reservedQty: Number(inventory.reservedQty) || 0,
+              reorderPoint: Number(inventory.reorderPoint) || 10,
+              reorderQty: Number(inventory.reorderQty) || 0,
                 lot: inventory.lot
                   ? {
                       number: inventory.lot.number,
@@ -229,6 +246,17 @@ export const kanittApi = createApi({
                 sku: v.sku,
                 barcode: v.barcode || "",
                 stock: Number(v.stock ?? 0),
+                availableStock: Array.isArray(p.inventories)
+                  ? p.inventories
+                      .filter((inventory: any) => inventory.variantId === v.id)
+                      .filter((inventory: any) => {
+                        if (!inventory.lot?.expiryDate) return true;
+                        const expiry = new Date(inventory.lot.expiryDate);
+                        expiry.setUTCHours(23, 59, 59, 999);
+                        return expiry.getTime() >= Date.now();
+                      })
+                      .reduce((sum: number, inventory: any) => sum + Math.max(0, Number(inventory.quantity) - Number(inventory.reservedQty || 0)), 0)
+                  : Number(v.stock ?? 0),
                 price: Number(v.price) || 0,
                 costPrice: Number(v.costPrice) || 0,
               }))
@@ -376,9 +404,10 @@ export const kanittApi = createApi({
         variantId?: string;
         quantity: number;
         reason: string;
+        movementType?: "ADJUSTMENT" | "DAMAGE" | "EXPIRED";
       }
     >({
-      query: ({ storeId, productId, variantId, quantity, reason }) => ({
+      query: ({ storeId, productId, variantId, quantity, reason, movementType }) => ({
         url: "/tenant/inventory/movements",
         method: "POST",
         body: {
@@ -386,7 +415,7 @@ export const kanittApi = createApi({
           productId,
           variantId,
           quantity,
-          type: "ADJUSTMENT",
+          type: movementType || "ADJUSTMENT",
           referenceId: `DESKTOP-${crypto.randomUUID()}`,
           referenceType: "ManualAdjustment",
           reason,
@@ -904,6 +933,9 @@ export const kanittApi = createApi({
 });
 
 export const {
+  useGetStockRequestsQuery,
+  useCreateStockRequestMutation,
+  useUpdateStockRequestMutation,
   useGetHealthQuery,
   useGetProductsQuery,
   useCreateProductMutation,

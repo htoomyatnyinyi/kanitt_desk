@@ -97,7 +97,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
             </div>
             {receipt.payments?.map((payment, index) => (
               <div key={payment.method + index} className="flex justify-between">
-                <span>{payment.method.replaceAll("_", " ")}:</span>
+                <span>{payment.method.replace(/_/g, " ")}:</span>
                 <span className="font-semibold">{payment.amount.toLocaleString()} MMK</span>
               </div>
             ))}

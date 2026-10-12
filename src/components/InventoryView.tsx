@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Product } from "../types";
+import { useCreateStockRequestMutation, useGetStockRequestsQuery, useUpdateStockRequestMutation } from "../store/apiSlice";
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                             */
@@ -33,7 +34,7 @@ const EXPIRY_SOON_DAYS = 90;
 
 type SortKey = "name" | "sku" | "category" | "price" | "stock";
 type SortDir = "asc" | "desc";
-type StockFilter = "all" | "in" | "low" | "critical" | "out" | "expiring";
+type StockFilter = "all" | "in" | "low" | "critical" | "out" | "expiring" | "reorder";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -91,6 +92,15 @@ const getLots = (product: Product) =>
 
 const hasExpiryRisk = (product: Product) =>
   getLots(product).some((lot) => lot.days <= EXPIRY_SOON_DAYS);
+const reorderPoint = (product: Product) => {
+  const values = (product.inventories ?? []).map((row) => num(row.reorderPoint)).filter((value) => value > 0);
+  return values.length ? Math.max(...values) : 10;
+};
+const suggestedReorder = (product: Product) => {
+  const quantities = (product.inventories ?? []).map((row) => num(row.reorderQty));
+  const reorderQty = quantities.length ? Math.max(...quantities) : 0;
+  return Math.max(reorderQty, reorderPoint(product) - num(product.stock));
+};
 
 const productSubtitle = (product: Product) =>
   [
@@ -111,11 +121,15 @@ const csvCell = (value: unknown) =>
 
 interface InventoryViewProps {
   products: Product[];
+  storeId?: string;
+  userRole?: string;
   isLoading?: boolean;
 }
 
 export function InventoryView({
   products,
+  storeId,
+  userRole = "CASHIER",
   isLoading = false,
 }: InventoryViewProps) {
   const [query, setQuery] = useState("");
@@ -125,6 +139,14 @@ export function InventoryView({
   const [pageSize, setPageSize] = useState<number>(100);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selected, setSelected] = useState<Product | null>(null);
+  const [requestTarget, setRequestTarget] = useState<Product | null>(null);
+  const [requestQuantity, setRequestQuantity] = useState("1");
+  const [requestReason, setRequestReason] = useState("");
+  const { data: stockRequests = [] } = useGetStockRequestsQuery({ storeId }, { pollingInterval: 30000, skip: !storeId });
+  const [createStockRequest, { isLoading: isRequesting }] = useCreateStockRequestMutation();
+  const [updateStockRequest] = useUpdateStockRequestMutation();
+  const canReviewRequests = ["MANAGER", "ADMIN", "SUPER_ADMIN"].includes(userRole);
+  const canCreateRequests = ["CASHIER", "MANAGER"].includes(userRole);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -143,6 +165,7 @@ export function InventoryView({
   const filteredProducts = useMemo(() => {
     if (stockFilter === "all") return searchFiltered;
     if (stockFilter === "expiring") return searchFiltered.filter(hasExpiryRisk);
+    if (stockFilter === "reorder") return searchFiltered.filter((product) => num(product.stock) <= reorderPoint(product));
     return searchFiltered.filter(
       (product) => getTone(num(product.stock)) === stockFilter,
     );
@@ -193,6 +216,7 @@ export function InventoryView({
       critical: 0,
       out: 0,
       expiring: 0,
+      reorder: 0,
       stockValue: 0,
       units: 0,
     };
@@ -202,6 +226,7 @@ export function InventoryView({
       result.units += stock;
       result.stockValue += stock * num(product.price);
       if (hasExpiryRisk(product)) result.expiring += 1;
+      if (stock <= reorderPoint(product)) result.reorder += 1;
     }
     return result;
   }, [searchFiltered]);
@@ -217,6 +242,7 @@ export function InventoryView({
       label: `Expiring ≤${EXPIRY_SOON_DAYS}d`,
       count: stats.expiring,
     },
+    { id: "reorder", label: "Reorder", count: stats.reorder },
   ];
 
   const filtersActive = query !== "" || stockFilter !== "all";
@@ -360,6 +386,23 @@ export function InventoryView({
           </button>
         </div>
       </div>
+
+      {storeId && stockRequests.some((request: any) => request.status === "PENDING" || request.status === "ACKNOWLEDGED") && (
+        <section className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div><h3 className="text-sm font-bold text-white">Stock requests</h3><p className="mt-0.5 text-[11px] text-slate-400">Requests do not change stock. Receive a purchase or transfer to update inventory.</p></div>
+            <span className="rounded-full bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300">{stockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).length} open</span>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-2">
+            {stockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).slice(0, 8).map((request: any) => (
+              <div key={request.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-100">{request.product?.name} · {request.variant?.name}</p><p className="mt-1 text-[10px] text-slate-400">{request.quantity} requested by {request.requestedBy?.name} · {request.status.toLowerCase()}</p>{request.reason && <p className="mt-1 text-[10px] text-slate-500">{request.reason}</p>}</div>
+                {canReviewRequests && <div className="flex gap-1.5">{request.status === "PENDING" && <button onClick={() => updateStockRequest({ id: request.id, patch: { status: "ACKNOWLEDGED" } })} className="rounded-lg bg-sky-500/10 px-2 py-1.5 text-[10px] font-bold text-sky-300">Acknowledge</button>}{request.status === "ACKNOWLEDGED" && <button title="Use after the purchase or transfer has actually been received" onClick={() => updateStockRequest({ id: request.id, patch: { status: "FULFILLED" } })} className="rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-300">Received</button>}<button onClick={() => updateStockRequest({ id: request.id, patch: { status: "REJECTED" } })} className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-[10px] font-bold text-rose-300">Reject</button></div>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* KPI cards */}
       <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -589,6 +632,11 @@ export function InventoryView({
 
                   <td className="px-5 py-3 text-right font-bold tabular-nums text-white">
                     {stock.toLocaleString()}
+                    {stock <= reorderPoint(product) && (
+                      <div className="mt-1 text-[10px] font-semibold text-amber-300">
+                        Reorder {suggestedReorder(product)} · min {reorderPoint(product)}
+                      </div>
+                    )}
                     {lots.length > 0 && (
                       <div className="mt-1 space-y-1 text-[10px] font-medium text-slate-400">
                         {lots.slice(0, 3).map((lot) => (
@@ -627,6 +675,9 @@ export function InventoryView({
                     >
                       {tone.label}
                     </span>
+                    {canCreateRequests && storeId && stock <= reorderPoint(product) && (
+                      <button type="button" onClick={(event) => { event.stopPropagation(); setRequestTarget(product); setRequestQuantity(String(suggestedReorder(product))); }} className="mt-2 block w-full rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] font-bold text-amber-200 hover:bg-amber-500/20">Request stock</button>
+                    )}
                   </td>
                 </tr>
               );
@@ -713,6 +764,25 @@ export function InventoryView({
       {/* Detail drawer */}
       {selected && (
         <ProductDrawer product={selected} onClose={() => setSelected(null)} />
+      )}
+      {requestTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setRequestTarget(null); }}>
+          <form className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl" onSubmit={async (event) => {
+            event.preventDefault();
+            const quantity = Number(requestQuantity);
+            if (!storeId || !requestTarget.productId || !requestTarget.variantId || !Number.isInteger(quantity) || quantity < 1) return;
+            try {
+              await createStockRequest({ storeId, productId: requestTarget.productId, variantId: requestTarget.variantId, quantity, reason: requestReason }).unwrap();
+              setRequestTarget(null); setRequestReason("");
+            } catch (error: any) { window.alert(error?.data?.message || "Could not submit stock request."); }
+          }}>
+            <h3 className="text-lg font-bold text-white">Request stock</h3>
+            <p className="mt-1 text-sm text-slate-400">{requestTarget.name} · Current stock {num(requestTarget.stock)}</p>
+            <label className="mt-4 block text-xs font-semibold text-slate-300">Quantity needed<input autoFocus min="1" step="1" type="number" value={requestQuantity} onChange={(event) => setRequestQuantity(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500" /></label>
+            <label className="mt-3 block text-xs font-semibold text-slate-300">Note (optional)<textarea value={requestReason} onChange={(event) => setRequestReason(event.target.value)} maxLength={500} rows={3} placeholder="Low stock, customer demand…" className="mt-1 w-full resize-none rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-500" /></label>
+            <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setRequestTarget(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-400 hover:text-white">Cancel</button><button disabled={isRequesting} className="rounded-xl bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">{isRequesting ? "Sending…" : "Send request"}</button></div>
+          </form>
+        </div>
       )}
     </main>
   );
@@ -844,6 +914,8 @@ function ProductDrawer({
     ["Category", product.category || "Uncategorised"],
     ["Unit price", `${num(product.price).toLocaleString()} MMK`],
     ["On hand", `${stock.toLocaleString()} units`],
+    ["Reorder point", `${reorderPoint(product)} units`],
+    ["Suggested reorder", `${suggestedReorder(product)} units`],
     ["Stock value", `${(stock * num(product.price)).toLocaleString()} MMK`],
   ];
 
@@ -960,204 +1032,3 @@ function ProductDrawer({
     </div>
   );
 }
-
-// // simple
-// import { ChevronLeft, ChevronRight, Search } from "lucide-react";
-// import { useMemo, useState } from "react";
-// import { Product } from "../types";
-
-// interface InventoryViewProps {
-//   products: Product[];
-//   isLoading?: boolean;
-// }
-
-// export function InventoryView({ products, isLoading = false }: InventoryViewProps) {
-//   const [query, setQuery] = useState("");
-//   const [pageSize, setPageSize] = useState<number>(100);
-//   const [currentPage, setCurrentPage] = useState<number>(1);
-
-//   const filteredProducts = useMemo(() => {
-//     const normalized = query.trim().toLowerCase();
-//     if (!normalized) return products;
-//     return products.filter((product) =>
-//       [product.name, product.sku, product.barcode, product.category]
-//         .map((val) => (val || "").toString().toLowerCase())
-//         .some((value) => value.includes(normalized))
-//     );
-//   }, [products, query]);
-
-//   const totalItems = filteredProducts.length;
-//   const totalPages = pageSize > 0 ? Math.ceil(totalItems / pageSize) || 1 : 1;
-//   const activePage = Math.min(currentPage, totalPages);
-
-//   const paginatedProducts = useMemo(() => {
-//     if (pageSize <= 0) return filteredProducts;
-//     const start = (activePage - 1) * pageSize;
-//     return filteredProducts.slice(start, start + pageSize);
-//   }, [filteredProducts, activePage, pageSize]);
-
-//   const startItem = totalItems === 0 ? 0 : (activePage - 1) * pageSize + 1;
-//   const endItem = pageSize <= 0 ? totalItems : Math.min(activePage * pageSize, totalItems);
-
-//   return (
-//     <main className="flex-1 flex flex-col p-6 overflow-y-auto">
-//       <div className="flex items-center justify-between mb-6">
-//         <div>
-//           <h2 className="text-2xl font-black text-white">Products & Stock</h2>
-//           <p className="text-xs text-slate-400 mt-1">
-//             {products.length.toLocaleString()} total products loaded from the selected store
-//           </p>
-//         </div>
-//       </div>
-
-//       {/* Search & Pagination Settings Bar */}
-//       <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
-//         <div className="relative w-full max-w-sm">
-//           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-//           <input
-//             type="text"
-//             placeholder="Search by name, SKU, barcode..."
-//             value={query}
-//             onChange={(event) => {
-//               setQuery(event.target.value);
-//               setCurrentPage(1);
-//             }}
-//             className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-//           />
-//         </div>
-
-//         <div className="flex items-center gap-3">
-//           <label className="text-xs text-slate-400 flex items-center gap-2">
-//             Per page:
-//             <select
-//               value={pageSize}
-//               onChange={(e) => {
-//                 setPageSize(Number(e.target.value));
-//                 setCurrentPage(1);
-//               }}
-//               className="bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-sky-500"
-//             >
-//               <option value={50}>50</option>
-//               <option value={100}>100</option>
-//               <option value={250}>250</option>
-//               <option value={500}>500</option>
-//               <option value={0}>All ({totalItems})</option>
-//             </select>
-//           </label>
-//         </div>
-//       </div>
-
-//       {/* Product Table */}
-//       <div className="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden flex-1">
-//         <table className="w-full text-sm">
-//           <thead>
-//             <tr className="border-b border-slate-800 text-left bg-slate-950/50">
-//               <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Product</th>
-//               <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">SKU</th>
-//               <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Category</th>
-//               <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-right">Price</th>
-//               <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-right">Stock</th>
-//               <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center">Status</th>
-//             </tr>
-//           </thead>
-//           <tbody>
-//             {paginatedProducts.map((product) => (
-//               <tr
-//                 key={product.id}
-//                 className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors cursor-pointer"
-//               >
-//                 <td className="px-5 py-3">
-//                   <div className="min-w-0">
-//                     <span className="font-semibold text-slate-100 block">{product.name}</span>
-//                     {(product.genericName || product.activeIngredient || product.strength || product.dosageForm) && (
-//                       <span className="block truncate text-[11px] font-medium text-emerald-400/90 mt-0.5">
-//                         {[product.genericName, product.activeIngredient, product.strength, product.dosageForm].filter(Boolean).join(" · ")}
-//                       </span>
-//                     )}
-//                   </div>
-//                 </td>
-//                 <td className="px-5 py-3 font-mono text-xs text-slate-400">{product.sku}</td>
-//                 <td className="px-5 py-3">
-//                   <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
-//                     {product.category}
-//                   </span>
-//                 </td>
-//                 <td className="px-5 py-3 text-right font-bold text-white">
-//                   {(Number(product.price) || 0).toLocaleString()}{" "}
-//                   <span className="text-slate-500 font-normal text-xs">MMK</span>
-//                 </td>
-//                 <td className="px-5 py-3 text-right font-bold text-white">
-//                   {(Number(product.stock) || 0).toLocaleString()}
-//                   {product.inventories?.some((inventory) => inventory.lot) && (
-//                     <div className="mt-1 space-y-1 text-[10px] font-medium text-slate-400">
-//                       {product.inventories
-//                         .filter((inventory) => inventory.lot)
-//                         .map((inventory, index) => (
-//                           <div key={`${inventory.lot?.number}-${index}`}>
-//                             Lot {inventory.lot?.number} · {Number(inventory.quantity) || 0} {inventory.lot?.expiryDate ? `· Exp ${new Date(inventory.lot.expiryDate).toLocaleDateString()}` : ""}
-//                           </div>
-//                         ))}
-//                     </div>
-//                   )}
-//                 </td>
-//                 <td className="px-5 py-3 text-center">
-//                   <span
-//                     className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-//                       (Number(product.stock) || 0) > 20
-//                         ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-//                         : (Number(product.stock) || 0) > 5
-//                         ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-//                         : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-//                     }`}
-//                   >
-//                     {(Number(product.stock) || 0) > 20 ? "In Stock" : (Number(product.stock) || 0) > 5 ? "Low" : "Critical"}
-//                   </span>
-//                 </td>
-//               </tr>
-//             ))}
-//             {paginatedProducts.length === 0 && (
-//               <tr>
-//                 <td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-400">
-//                   {isLoading ? "Loading products..." : query ? `No products matching "${query}".` : "No products found in this store."}
-//                 </td>
-//               </tr>
-//             )}
-//           </tbody>
-//         </table>
-//       </div>
-
-//       {/* Pagination Footer Controls */}
-//       {totalItems > 0 && (
-//         <div className="mt-4 flex flex-wrap items-center justify-between gap-4 px-2">
-//           <p className="text-xs text-slate-400">
-//             Showing <strong className="text-white">{startItem.toLocaleString()}</strong> to{" "}
-//             <strong className="text-white">{endItem.toLocaleString()}</strong> of{" "}
-//             <strong className="text-white">{totalItems.toLocaleString()}</strong> items
-//           </p>
-
-//           {pageSize > 0 && totalPages > 1 && (
-//             <div className="flex items-center gap-2">
-//               <button
-//                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-//                 disabled={activePage <= 1}
-//                 className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 disabled:opacity-40 transition-colors"
-//               >
-//                 <ChevronLeft className="h-3.5 w-3.5" /> Previous
-//               </button>
-//               <span className="text-xs text-slate-400 px-2">
-//                 Page <strong className="text-white">{activePage}</strong> of {totalPages}
-//               </span>
-//               <button
-//                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-//                 disabled={activePage >= totalPages}
-//                 className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 disabled:opacity-40 transition-colors"
-//               >
-//                 Next <ChevronRight className="h-3.5 w-3.5" />
-//               </button>
-//             </div>
-//           )}
-//         </div>
-//       )}
-//     </main>
-//   );
-// }

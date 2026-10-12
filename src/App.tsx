@@ -423,8 +423,15 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       barcode: variant.barcode || product.barcode,
       price: Number(variant.price ?? product.price ?? 0),
       costPrice: variant.costPrice ?? product.costPrice,
-      stock: Number(variant.stock ?? 0),
-      variants: [variant],
+      stock: Number(variant.availableStock ?? variant.stock ?? 0),
+      quantity: 1,
+      variants: [
+        {
+          ...variant,
+          sku: variant.sku || product.sku,
+          price: Number(variant.price ?? product.price ?? 0),
+        },
+      ],
     };
     setCart((prev) => {
       const existing = prev.find((item) => item.id === cartProduct.id);
@@ -703,13 +710,14 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               return updateSupplier({ id, patch: payload }).unwrap();
             return updateCustomer({ id, patch: payload }).unwrap();
           }}
-          onAdjustStock={(productId, variantId, quantity, reason) =>
+          onAdjustStock={(productId, variantId, quantity, reason, movementType) =>
             adjustStock({
               storeId: selectedStore!.id,
               productId,
               variantId,
               quantity,
               reason,
+              movementType,
             }).unwrap()
           }
           onAssignBarcode={(productId, barcode) =>
@@ -834,9 +842,13 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
 
       {activeTab === "inventory" && (
         <InventoryView
+          storeId={selectedStore?.id}
+          userRole={userRole}
           products={products.flatMap((product) =>
             (product.variants ?? []).map((variant) => ({
               ...product,
+              productId: product.id,
+              variantId: variant.id,
               id: `${product.id}:${variant.id}`,
               name: `${product.name} · ${variant.name}`,
               sku: variant.sku || product.sku,

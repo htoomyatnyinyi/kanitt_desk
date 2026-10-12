@@ -15,6 +15,7 @@ export type Variant = {
   price?: number;
   costPrice?: number;
   stock?: number;
+  availableStock?: number;
 };
 
 /**
@@ -136,6 +137,7 @@ export function PosView({
         return;
       }
       if (variants.length === 1) {
+        if (Number(variants[0].availableStock ?? variants[0].stock ?? 0) <= 0) return;
         addToCart(product, variants[0]);
         return;
       }
@@ -182,7 +184,9 @@ export function PosView({
           (variant.sku || "").toLowerCase() === query,
       );
       if (variantHit) {
-        addToCart(product, variantHit);
+        if (Number(variantHit.availableStock ?? variantHit.stock ?? 0) > 0) {
+          addToCart(product, variantHit);
+        }
         setSearchQuery("");
         return;
       }
@@ -425,7 +429,7 @@ export function PosView({
             {/* Variant list */}
             <ul className="flex-1 overflow-y-auto p-2">
               {filteredVariants.map((variant) => {
-                const vStock = Number(variant.stock) || 0;
+                const vStock = Number(variant.availableStock ?? variant.stock) || 0;
                 const outOfStock = vStock <= 0;
                 const price = Number(variant.price ?? variantPicker.price) || 0;
                 const subtitle = variantSubtitle(variant);

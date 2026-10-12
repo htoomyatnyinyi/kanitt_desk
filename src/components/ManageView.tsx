@@ -74,6 +74,7 @@ interface Props {
     variantId: string | undefined,
     delta: number,
     reason: string,
+    movementType?: "ADJUSTMENT" | "DAMAGE" | "EXPIRED",
   ) => Promise<unknown>;
   onAssignBarcode: (productId: string, barcode: string) => Promise<unknown>;
   onNavigate: (tab: Destination) => void;
@@ -217,6 +218,7 @@ export function ManageView(props: Props) {
     productId: "",
     variantId: "",
     mode: "IN",
+    movementType: "ADJUSTMENT" as "ADJUSTMENT" | "DAMAGE" | "EXPIRED",
     quantity: "",
     reason: "",
   });
@@ -491,6 +493,7 @@ export function ManageView(props: Props) {
       productId,
       variantId: "",
       mode: "IN",
+      movementType: "ADJUSTMENT",
       quantity: "",
       reason: "",
     });
@@ -520,6 +523,7 @@ export function ManageView(props: Props) {
           stockFields.variantId || undefined,
           stockFields.mode === "IN" ? quantity : -quantity,
           stockFields.reason.trim(),
+          stockFields.mode === "OUT" ? stockFields.movementType : "ADJUSTMENT",
         );
         setNotice("Stock adjustment saved to the server.");
       } else if (dialog === "edit") {
@@ -1586,6 +1590,23 @@ export function ManageView(props: Props) {
                     className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
                   />
                 </label>
+                {stockFields.mode === "OUT" && (
+                  <label className="block text-xs text-slate-400">
+                    Stock-out reason type
+                    <select
+                      value={stockFields.movementType}
+                      onChange={(event) => setStockFields((current) => ({
+                        ...current,
+                        movementType: event.target.value as "ADJUSTMENT" | "DAMAGE" | "EXPIRED",
+                      }))}
+                      className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white"
+                    >
+                      <option value="ADJUSTMENT">Correction</option>
+                      <option value="DAMAGE">Damaged stock</option>
+                      <option value="EXPIRED">Expired stock</option>
+                    </select>
+                  </label>
+                )}
               </div>
             ) : section === "products" ? (
               <div className="px-6 py-5">
