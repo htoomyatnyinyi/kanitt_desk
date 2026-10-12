@@ -255,7 +255,9 @@ export function PosView({
       </div>
 
       {/* Product grid */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4 flex-1">
+      {/* အပေါ်က Comment ဖြုတ်ပြီး ဒီလိုပြင်ပါ */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3.5 lg:gap-4 flex-1 content-start">
+        {/* <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4 flex-1"> */}
         {paginatedProducts.map((product) => {
           const variants = getVariants(product);
           const variantCount = variants.length;
@@ -385,7 +387,7 @@ export function PosView({
       {/* ---------------------- Variant picker -------------------- */}
       {variantPicker && (
         <div
-          className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-80 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={closePicker}
           role="presentation"
         >

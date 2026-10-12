@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BadgePercent,
   Bell,
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { Store as ApiStore } from "../store/apiSlice";
 import { decodeAuthToken } from "../services/secureStorage";
+import { apiService } from "../services/api";
 import {
   useGetNotificationUnreadCountQuery,
   useGetStockRequestsQuery,
@@ -217,10 +218,19 @@ export function Sidebar({
         userRole === "ACCOUNTANT",
     },
   );
-  const { data: unreadNotifications = 0 } = useGetNotificationUnreadCountQuery(
-    undefined,
-    { pollingInterval: 30000 },
-  );
+  const { data: unreadNotifications = 0, refetch: refreshUnreadNotifications } =
+    useGetNotificationUnreadCountQuery(undefined, { pollingInterval: 30000 });
+  const realtimeRoomId = selectedStore?.id || "tenant";
+  useEffect(() => {
+    return apiService.connectRealtime(
+      realtimeRoomId,
+      (event) => {
+        if (event.type === "notification.created")
+          void refreshUnreadNotifications();
+      },
+      () => {},
+    );
+  }, [realtimeRoomId, refreshUnreadNotifications]);
   const openStockRequestCount = visibleStockRequests.filter((request: any) =>
     ["PENDING", "ACKNOWLEDGED"].includes(request.status),
   ).length;
@@ -229,11 +239,15 @@ export function Sidebar({
 
   return (
     <aside
-      className={`flex h-screen h-dvh shrink-0 flex-col border-r border-slate-800/80 bg-[#0b1220] py-3 transition-all duration-300 ${isCompact ? "w-16 px-2" : "w-16 px-2 md:w-52 lg:w-56 xl:w-64 md:px-3"}`}
+      className={`flex h-screen shrink-0 flex-col border-r border-slate-800/80 bg-[#0b1220] py-3 transition-all duration-300 ${isCompact ? "w-16 px-2" : "w-16 px-2 md:w-52 lg:w-56 xl:w-64 md:px-3"}`}
     >
       <div className="mb-4 flex h-10 items-center justify-between px-1">
         <div className="flex items-center gap-2.5">
-          <img src="/kanitt-mark.svg" alt="Kanitt" className="h-9 w-9 shrink-0 rounded-[12px] shadow-lg shadow-sky-500/20" />
+          <img
+            src="/kanitt-mark.svg"
+            alt="Kanitt"
+            className="h-9 w-9 shrink-0 rounded-xl shadow-lg shadow-sky-500/20"
+          />
           {!isCompact && (
             <div className="hidden min-w-0 flex-1 md:block">
               {/* business organism name */}
@@ -243,9 +257,9 @@ export function Sidebar({
                 <span className="text-sm font-bold text-white">
                   {selectedStore?.name}
                 </span>
-                <span className="text-xs text-slate-500">
+                {/* <span className="text-xs text-slate-500">
                   {selectedStore?.id}
-                </span>
+                </span> */}
               </div>
               {/* <h1 className="truncate text-sm font-extrabold tracking-wide text-white">
                 KANITT
