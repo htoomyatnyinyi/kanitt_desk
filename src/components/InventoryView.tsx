@@ -387,17 +387,18 @@ export function InventoryView({
         </div>
       </div>
 
-      {storeId && stockRequests.some((request: any) => request.status === "PENDING" || request.status === "ACKNOWLEDGED") && (
+      {storeId && stockRequests.length > 0 && (
         <section className="mb-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div><h3 className="text-sm font-bold text-white">Stock requests</h3><p className="mt-0.5 text-[11px] text-slate-400">Requests do not change stock. Receive a purchase or transfer to update inventory.</p></div>
+            <div><h3 className="text-sm font-bold text-white">Stock requests &amp; updates</h3><p className="mt-0.5 text-[11px] text-slate-400">Your request status appears here after a manager reviews it. Requests do not change stock.</p></div>
             <span className="rounded-full bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300">{stockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).length} open</span>
           </div>
           <div className="grid gap-2 lg:grid-cols-2">
-            {stockRequests.filter((request: any) => ["PENDING", "ACKNOWLEDGED"].includes(request.status)).slice(0, 8).map((request: any) => (
+            {stockRequests.slice(0, 10).map((request: any) => (
               <div key={request.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                 <div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-slate-100">{request.product?.name} · {request.variant?.name}</p><p className="mt-1 text-[10px] text-slate-400">{request.quantity} requested by {request.requestedBy?.name} · {request.status.toLowerCase()}</p>{request.reason && <p className="mt-1 text-[10px] text-slate-500">{request.reason}</p>}</div>
-                {canReviewRequests && <div className="flex gap-1.5">{request.status === "PENDING" && <button onClick={() => updateStockRequest({ id: request.id, patch: { status: "ACKNOWLEDGED" } })} className="rounded-lg bg-sky-500/10 px-2 py-1.5 text-[10px] font-bold text-sky-300">Acknowledge</button>}{request.status === "ACKNOWLEDGED" && <button title="Use after the purchase or transfer has actually been received" onClick={() => updateStockRequest({ id: request.id, patch: { status: "FULFILLED" } })} className="rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-300">Received</button>}<button onClick={() => updateStockRequest({ id: request.id, patch: { status: "REJECTED" } })} className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-[10px] font-bold text-rose-300">Reject</button></div>}
+                {request.reviewNote && <p className="mt-1 w-full text-[10px] text-sky-200">Manager note: {request.reviewNote}</p>}
+                {canReviewRequests && ["PENDING", "ACKNOWLEDGED"].includes(request.status) && <div className="flex gap-1.5">{request.status === "PENDING" && <button onClick={() => updateStockRequest({ id: request.id, patch: { status: "ACKNOWLEDGED" } })} className="rounded-lg bg-sky-500/10 px-2 py-1.5 text-[10px] font-bold text-sky-300">Acknowledge</button>}{request.status === "ACKNOWLEDGED" && <button title="Use after the purchase or transfer has actually been received" onClick={() => updateStockRequest({ id: request.id, patch: { status: "FULFILLED" } })} className="rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-300">Received</button>}<button onClick={() => updateStockRequest({ id: request.id, patch: { status: "REJECTED" } })} className="rounded-lg bg-rose-500/10 px-2 py-1.5 text-[10px] font-bold text-rose-300">Reject</button></div>}
               </div>
             ))}
           </div>

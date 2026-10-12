@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Eye, EyeOff, Store, Loader2, AlertCircle } from "lucide-react";
-import { useLoginMutation } from "../store/apiSlice";
+import {
+  useLoginMutation,
+  useResendVerificationCodeMutation,
+  useVerifyEmailMutation,
+} from "../store/apiSlice";
 
 import { setAuthToken } from "../services/secureStorage";
 
@@ -14,9 +18,14 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [tenantCode, setTenantCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showTenantCode, setShowTenantCode] = useState(false);
+  const [verificationStep, setVerificationStep] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [loginApi, { isLoading }] = useLoginMutation();
+  const [verifyEmail, { isLoading: isVerifying }] = useVerifyEmailMutation();
+  const [resendCode, { isLoading: isResending }] = useResendVerificationCodeMutation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +49,42 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       if (code === "TENANT_CODE_REQUIRED") {
         setShowTenantCode(true);
         setError("Multiple accounts found. Please enter your Organization Code.");
+      } else if (code === "EMAIL_NOT_VERIFIED") {
+        setVerificationStep(true);
+        setVerificationCode("");
+        setError(null);
+        setVerificationMessage("We sent a 6-digit verification code to " + email.trim() + ".");
       } else {
         setError(msg);
       }
+    }
+  };
+
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setVerificationMessage(null);
+    if (!/^\d{6}$/.test(verificationCode)) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    try {
+      const result = await verifyEmail({ email: email.trim(), code: verificationCode }).unwrap();
+      await setAuthToken(result.token);
+      onLoginSuccess(result.token);
+    } catch (err: any) {
+      setError(err?.data?.message || "That code is invalid or expired. Request a new code and try again.");
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError(null);
+    setVerificationMessage(null);
+    try {
+      const result = await resendCode({ email: email.trim() }).unwrap();
+      setVerificationMessage(result.message || "A new code was sent. Check your inbox and spam folder.");
+    } catch (err: any) {
+      setError(err?.data?.message || "Could not resend the code. Try again later.");
     }
   };
 
@@ -66,7 +108,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {/* Login Card */}
         <div className="bg-slate-900/80 backdrop-blur border border-slate-800 rounded-3xl p-8 shadow-2xl">
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={verificationStep ? handleVerifyEmail : handleLogin} className="space-y-5">
             {/* Error Alert */}
             {error && (
               <div className="flex items-start gap-3 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-xl px-4 py-3 text-sm">
@@ -75,6 +117,36 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               </div>
             )}
 
+            {verificationStep ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 text-sm text-sky-200">
+                  Enter the 6-digit code sent to <strong>{email.trim()}</strong>.
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                    Verification code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={verificationCode}
+                    onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-center font-mono text-xl tracking-[0.5em] text-white placeholder-slate-700 focus:border-sky-500 focus:outline-none"
+                  />
+                </div>
+                {verificationMessage && <p role="status" className="text-xs text-emerald-300">{verificationMessage}</p>}
+                <div className="flex items-center justify-between text-xs">
+                  <button type="button" onClick={() => { setVerificationStep(false); setVerificationMessage(null); setError(null); }} className="text-slate-400 hover:text-white">Back to sign in</button>
+                  <button type="button" disabled={isResending} onClick={() => void handleResendCode()} className="font-semibold text-sky-300 hover:text-sky-200 disabled:opacity-50">{isResending ? "Sending…" : "Resend code"}</button>
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Email */}
             <div>
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
@@ -145,20 +217,22 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 Have an organization code? →
               </button>
             )}
+              </>
+            )}
 
             {/* Submit */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isVerifying}
               className="w-full mt-2 bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isLoading ? (
+              {isLoading || isVerifying ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Signing in...
+                  {verificationStep ? "Verifying…" : "Signing in..."}
                 </>
               ) : (
-                "Sign In to POS"
+                verificationStep ? "Verify email & sign in" : "Sign In to POS"
               )}
             </button>
           </form>

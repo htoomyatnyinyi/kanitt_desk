@@ -795,6 +795,18 @@ export const kanittApi = createApi({
         body,
       }),
     }),
+    verifyEmail: builder.mutation<
+      { success: boolean; token: string; user: any; message?: string },
+      { email: string; code: string }
+    >({
+      query: (body) => ({ url: "/auth/verify-email", method: "POST", body }),
+    }),
+    resendVerificationCode: builder.mutation<
+      { success: boolean; message: string },
+      { email: string }
+    >({
+      query: (body) => ({ url: "/auth/resend-otp", method: "POST", body }),
+    }),
 
     // ── Admin: Tenant Profile ────────────────────────────────────────────
     getTenantProfile: builder.query<any, void>({
@@ -997,6 +1009,8 @@ export const {
   useQuoteOrderMutation,
   useCompleteOrderMutation,
   useLoginMutation,
+  useVerifyEmailMutation,
+  useResendVerificationCodeMutation,
   // Admin
   useGetTenantProfileQuery,
   useUpdateTenantProfileMutation,
