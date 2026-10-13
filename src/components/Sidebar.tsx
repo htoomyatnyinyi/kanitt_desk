@@ -120,7 +120,8 @@ const groups: {
         permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
       },
       { id: "pos", label: "Point of sale", icon: ShoppingBag },
-      { id: "chat", label: "Store chat", icon: MessageCircle },
+      // { id: "chat", label: "Store chat", icon: MessageCircle },
+      { id: "sessions", label: "Register sessions", icon: Clock3 },
     ],
   },
   {
@@ -129,7 +130,7 @@ const groups: {
       { id: "orders", label: "Orders & returns", icon: ReceiptText },
       { id: "inventory", label: "Inventory", icon: Boxes },
       { id: "requests", label: "Stock requests", icon: ClipboardCheck },
-      { id: "sessions", label: "Register sessions", icon: Clock3 },
+      // { id: "sessions", label: "Register sessions", icon: Clock3 },
     ],
   },
   {
@@ -167,6 +168,7 @@ const groups: {
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
         permissions: ["VIEW_AUDIT_LOGS"],
       },
+      { id: "chat", label: "Store chat", icon: MessageCircle },
     ],
   },
   {
