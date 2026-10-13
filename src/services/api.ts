@@ -1,4 +1,6 @@
-let _base = (import.meta.env.VITE_API_URL || "https://pos.oasislab.de5.net").trim().replace(/\/+$/, "");
+let _base = (import.meta.env.VITE_API_URL || "https://dev.oasislab.de5.net")
+  .trim()
+  .replace(/\/+$/, "");
 if (!/\/api$/i.test(_base)) _base = `${_base}/api`;
 const SERVER_URL = _base;
 export const resolveMediaUrl = (path?: string) => {
@@ -129,10 +131,28 @@ class ApiService {
   }
 
   async getChatRooms() {
-    return this.request<{ rooms: { stores: { id: string; name: string }[]; mainStoreId?: string; canAccessMainChat: boolean; canMessageAdmins: boolean; adminThreads: { userId: string; name: string }[]; members: { id: string; name?: string; username?: string; role: string }[] } }>("/tenant/chat/rooms");
+    return this.request<{
+      rooms: {
+        stores: { id: string; name: string }[];
+        mainStoreId?: string;
+        canAccessMainChat: boolean;
+        canMessageAdmins: boolean;
+        adminThreads: { userId: string; name: string }[];
+        members: {
+          id: string;
+          name?: string;
+          username?: string;
+          role: string;
+        }[];
+      };
+    }>("/tenant/chat/rooms");
   }
 
-  async getChatMessages(roomId: string, afterId?: string, signal?: AbortSignal) {
+  async getChatMessages(
+    roomId: string,
+    afterId?: string,
+    signal?: AbortSignal,
+  ) {
     const params = afterId ? `?afterId=${encodeURIComponent(afterId)}` : "";
     return this.request<{ messages: ChatMessage[]; hasMore?: boolean }>(
       `/tenant/chat/${encodeURIComponent(roomId)}/messages${params}`,
@@ -140,7 +160,11 @@ class ApiService {
     );
   }
 
-  connectRealtime(roomId: string, onEvent: (event: any) => void, onStatus: (ready: boolean) => void) {
+  connectRealtime(
+    roomId: string,
+    onEvent: (event: any) => void,
+    onStatus: (ready: boolean) => void,
+  ) {
     if (!this.token) return () => {};
     const socketUrl = `${SERVER_URL}/realtime/`.replace(/^http/i, "ws");
     let socket: WebSocket | undefined;
@@ -149,34 +173,64 @@ class ApiService {
     let retry = 0;
     const open = () => {
       if (stopped) return;
-      try { socket = new WebSocket(socketUrl); }
-      catch { scheduleRetry(); return; }
-      socket.onopen = () => socket?.send(JSON.stringify({ type: "auth", token: this.token, roomId }));
+      try {
+        socket = new WebSocket(socketUrl);
+      } catch {
+        scheduleRetry();
+        return;
+      }
+      socket.onopen = () =>
+        socket?.send(
+          JSON.stringify({ type: "auth", token: this.token, roomId }),
+        );
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(String(event.data));
-          if (payload.type === "ready") { retry = 0; onStatus(true); }
-          else if (payload.type === "error") onStatus(false);
+          if (payload.type === "ready") {
+            retry = 0;
+            onStatus(true);
+          } else if (payload.type === "error") onStatus(false);
           else onEvent(payload);
-        } catch { /* Ignore malformed server events and keep the connection alive. */ }
+        } catch {
+          /* Ignore malformed server events and keep the connection alive. */
+        }
       };
-      socket.onclose = () => { onStatus(false); scheduleRetry(); };
-      socket.onerror = () => { onStatus(false); socket?.close(); };
+      socket.onclose = () => {
+        onStatus(false);
+        scheduleRetry();
+      };
+      socket.onerror = () => {
+        onStatus(false);
+        socket?.close();
+      };
     };
     const scheduleRetry = () => {
       if (stopped || retryTimer !== undefined) return;
       retry += 1;
-      retryTimer = window.setTimeout(() => { retryTimer = undefined; open(); }, Math.min(15000, 500 * 2 ** Math.min(retry, 5)));
+      retryTimer = window.setTimeout(
+        () => {
+          retryTimer = undefined;
+          open();
+        },
+        Math.min(15000, 500 * 2 ** Math.min(retry, 5)),
+      );
     };
     open();
-    return () => { stopped = true; if (retryTimer !== undefined) window.clearTimeout(retryTimer); socket?.close(); };
+    return () => {
+      stopped = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      socket?.close();
+    };
   }
 
   async sendChatMessage(roomId: string, body: string) {
-    return this.request<{ message: ChatMessage }>(`/tenant/chat/${encodeURIComponent(roomId)}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ body }),
-    });
+    return this.request<{ message: ChatMessage }>(
+      `/tenant/chat/${encodeURIComponent(roomId)}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      },
+    );
   }
 
   // Fetch Active/All Sessions

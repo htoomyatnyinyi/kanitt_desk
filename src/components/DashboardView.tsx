@@ -178,6 +178,7 @@ export function DashboardView({
   );
   const lowStock = products.flatMap((product) =>
     (product.variants ?? [])
+      .filter((variant) => !product.baseUnitVariantId || variant.id === product.baseUnitVariantId)
       .filter((variant) => Number(variant.stock ?? 0) <= 5)
       .map((variant) => ({
         id: variant.id,

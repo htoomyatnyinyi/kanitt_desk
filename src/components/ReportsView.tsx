@@ -91,7 +91,9 @@ export function ReportsView({
 
     // Stock Valuation Metrics
     const sellableOptions = products.flatMap((product) =>
-      (product.variants ?? []).map((variant) => ({
+      (product.variants ?? [])
+        .filter((variant) => !product.baseUnitVariantId || variant.id === product.baseUnitVariantId)
+        .map((variant) => ({
         stock: Number(variant.stock ?? 0),
         price: Number(variant.price ?? product.price ?? 0),
         costPrice: Number(variant.costPrice ?? product.costPrice ?? Number(variant.price ?? product.price ?? 0) * 0.7),

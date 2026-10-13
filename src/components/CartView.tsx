@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { BadgePercent, CreditCard, Plus, Minus, Trash2, Receipt } from "lucide-react";
+import {
+  BadgePercent,
+  CreditCard,
+  Plus,
+  Minus,
+  Trash2,
+  Receipt,
+} from "lucide-react";
 import { CartItem } from "../types";
 
 interface CartViewProps {
@@ -47,7 +54,15 @@ export function CartView({
             <h2 className="font-bold text-slate-100 text-lg">Current Order</h2>
           </div>
           <div className="flex items-center gap-3">
-            {mobileCartOpen && <button type="button" onClick={() => setMobileCartOpen(false)} className="text-xs font-semibold text-slate-300 lg:hidden">Close</button>}
+            {mobileCartOpen && (
+              <button
+                type="button"
+                onClick={() => setMobileCartOpen(false)}
+                className="text-xs font-semibold text-slate-300 lg:hidden"
+              >
+                Close
+              </button>
+            )}
             <button
               onClick={() => setCart([])}
               disabled={cart.length === 0}
@@ -122,7 +137,14 @@ export function CartView({
               {subtotal.toLocaleString()} MMK
             </span>
           </div>
-          {discount > 0 && <div className="flex justify-between text-emerald-300"><span>Promotion {promotionCode ? `· ${promotionCode}` : ""}</span><span className="font-semibold">−{discount.toLocaleString()} MMK</span></div>}
+          {discount > 0 && (
+            <div className="flex justify-between text-emerald-300">
+              <span>Promotion {promotionCode ? `· ${promotionCode}` : ""}</span>
+              <span className="font-semibold">
+                −{discount.toLocaleString()} MMK
+              </span>
+            </div>
+          )}
           <div className="flex justify-between text-slate-400">
             <span>Configured tax</span>
             <span className="font-semibold text-slate-200">
@@ -130,10 +152,43 @@ export function CartView({
             </span>
           </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5">
-          <div className="flex items-center gap-2"><BadgePercent className="h-4 w-4 shrink-0 text-violet-300" /><input value={promotionInput} onChange={(event) => setPromotionInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); applyPromotion(); } }} placeholder="Promotion code" className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600" /><button onClick={applyPromotion} disabled={pricingLoading || cart.length === 0} className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-300 hover:border-violet-300/40 hover:text-white disabled:opacity-40">{pricingLoading ? "Checking…" : promotionCode ? "Update" : "Apply"}</button></div>
-          {pricingError ? <p className="mt-2 text-[10px] leading-4 text-rose-300">{pricingError}</p> : promotionCode ? <p className="mt-2 text-[10px] text-emerald-300">{promotionCode} will be revalidated at checkout.</p> : null}
-        </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5">
+            <div className="flex items-center gap-2">
+              <BadgePercent className="h-4 w-4 shrink-0 text-violet-300" />
+              <input
+                value={promotionInput}
+                onChange={(event) => setPromotionInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    applyPromotion();
+                  }
+                }}
+                placeholder="Promotion code"
+                className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600"
+              />
+              <button
+                onClick={applyPromotion}
+                disabled={pricingLoading || cart.length === 0}
+                className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-300 hover:border-violet-300/40 hover:text-white disabled:opacity-40"
+              >
+                {pricingLoading
+                  ? "Checking…"
+                  : promotionCode
+                    ? "Update"
+                    : "Apply"}
+              </button>
+            </div>
+            {pricingError ? (
+              <p className="mt-2 text-[10px] leading-4 text-rose-300">
+                {pricingError}
+              </p>
+            ) : promotionCode ? (
+              <p className="mt-2 text-[10px] text-emerald-300">
+                {promotionCode} will be revalidated at checkout.
+              </p>
+            ) : null}
+          </div>
           <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800/80">
             <span>Total Payable</span>
             <span className="text-sky-400 font-black text-lg">
@@ -143,7 +198,9 @@ export function CartView({
         </div>
 
         <button
-          disabled={cart.length === 0 || pricingLoading || Boolean(pricingError)}
+          disabled={
+            cart.length === 0 || pricingLoading || Boolean(pricingError)
+          }
           onClick={() => setPaymentModalOpen(true)}
           className="w-full bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all active:scale-98"
         >
@@ -163,20 +220,39 @@ export function CartView({
         <button
           type="button"
           onClick={() => setMobileCartOpen(true)}
-          className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between border-t border-slate-700 bg-slate-900 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-left shadow-[0_-10px_30px_rgba(0,0,0,0.35)]"
+          className="fixed inset-x-0 bottom-15 z-40 flex items-center justify-between border-t border-slate-700 bg-slate-900 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-left shadow-[0_-10px_30px_rgba(0,0,0,0.35)]"
         >
           <span className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-300"><Receipt className="h-5 w-5" /></span>
-            <span className="min-w-0"><span className="block text-sm font-bold text-white">View cart · {cart.length} {cart.length === 1 ? "item" : "items"}</span><span className="block text-xs text-slate-400">{total.toLocaleString()} MMK</span></span>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-300">
+              <Receipt className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-white">
+                View cart · {cart.length} {cart.length === 1 ? "item" : "items"}
+              </span>
+              <span className="block text-xs text-slate-400">
+                {total.toLocaleString()} MMK
+              </span>
+            </span>
           </span>
-          <span className="ml-3 shrink-0 rounded-xl bg-sky-500 px-4 py-2.5 text-xs font-bold text-white">Checkout</span>
+          <span className="ml-3 shrink-0 rounded-xl bg-sky-500 px-4 py-2.5 text-xs font-bold text-white">
+            Checkout
+          </span>
         </button>
         {mobileCartOpen && (
           <div
             className="fixed inset-0 z-50 flex items-end bg-black/70"
-            onClick={(event) => { if (event.target === event.currentTarget) setMobileCartOpen(false); }}
+            onClick={(event) => {
+              if (event.target === event.currentTarget)
+                setMobileCartOpen(false);
+            }}
           >
-            <section role="dialog" aria-modal="true" aria-label="Shopping cart" className="h-[88dvh] w-full overflow-hidden rounded-t-3xl border border-slate-700 bg-slate-900 pb-[env(safe-area-inset-bottom)] shadow-2xl">
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-label="Shopping cart"
+              className="h-[88dvh] w-full overflow-hidden rounded-t-3xl border border-slate-700 bg-slate-900 pb-[env(safe-area-inset-bottom)] shadow-2xl"
+            >
               {cartPanel}
             </section>
           </div>

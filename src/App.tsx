@@ -911,7 +911,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               stock: variant.stock ?? 0,
               variants: [variant],
               inventories: product.inventories?.filter(
-                (inventory: any) => inventory.variantId === variant.id,
+                (inventory: any) => inventory.variantId === (product.baseUnitName && product.baseUnitVariantId ? product.baseUnitVariantId : variant.id),
               ),
             })),
           )}

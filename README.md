@@ -10,7 +10,7 @@ Prerequisites: Bun, Rust (stable), and the platform dependencies listed in the [
 2. In `kanitt_win`, copy `.env.example` to `.env` and set `VITE_API_URL=http://localhost:6060`.
 3. Run `bun install`, then `bun run desktop:dev`.
 
-To use the hosted backend, set `VITE_API_URL` to its origin, for example `https://pos.oasislab.de5.net`. The client appends `/api` unless the URL already ends with `/api`. Vite reads this value when it starts, so restart the dev process after changing it.
+To use the hosted backend, set `VITE_API_URL` to its origin, for example `https://dev.oasislab.de5.net`. The client appends `/api` unless the URL already ends with `/api`. Vite reads this value when it starts, so restart the dev process after changing it.
 
 ## Build installers
 

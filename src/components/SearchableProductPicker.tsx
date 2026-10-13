@@ -131,11 +131,14 @@ export function SearchableProductPicker({
             <>
               {results.items.map((product) => {
                 const variants = product.variants ?? [];
-                const onHand = variants.reduce(
+                const stockOptions = product.baseUnitVariantId
+                  ? variants.filter((variant) => variant.id === product.baseUnitVariantId)
+                  : variants;
+                const onHand = stockOptions.reduce(
                   (sum, variant) => sum + Number(variant.stock ?? 0),
                   0,
                 );
-                const available = variants.reduce(
+                const available = stockOptions.reduce(
                   (sum, variant) => sum + Number(variant.availableStock ?? variant.stock ?? 0),
                   0,
                 );
