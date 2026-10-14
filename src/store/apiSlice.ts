@@ -61,6 +61,7 @@ export interface Store {
 
 export interface Session {
   id: string;
+  userId?: string;
   storeId: string;
   cashierName?: string;
   openedAt: string;
@@ -133,6 +134,17 @@ export const kanittApi = createApi({
   reducerPath: "kanittApi",
   baseQuery: fetchBaseQuery({
     baseUrl: API_BASE_URL,
+    // Keep non-JSON proxy/server errors readable instead of replacing them
+    // with RTK Query's unhelpful "PARSING_ERROR" message.
+    responseHandler: async (response) => {
+      const text = await response.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    },
     prepareHeaders: (headers) => {
       const token = localStorage.getItem("kanitt_token");
       if (token) {

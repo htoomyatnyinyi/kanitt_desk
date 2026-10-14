@@ -113,7 +113,13 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
   }, [paperWidth]);
 
   useEffect(() => {
-    if (!receipt || !receipt.allowAutoPrint || !autoPrintReceipt || autoPrintedReceipt.current === receipt.orderNumber) return;
+    if (
+      !receipt ||
+      !receipt.allowAutoPrint ||
+      !autoPrintReceipt ||
+      autoPrintedReceipt.current === receipt.orderNumber
+    )
+      return;
     autoPrintedReceipt.current = receipt.orderNumber;
     // Delay to allow DOM to render
     window.setTimeout(() => handlePrint(), 300);
@@ -140,32 +146,61 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Receipt Preview Area (also used as source for printing) */}
-        <div ref={receiptRef} className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner" style={{ width: paperWidth + "mm" }}>
+        <div
+          ref={receiptRef}
+          className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner"
+          style={{ width: paperWidth + "mm" }}
+        >
           {/* Header & Logo */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
-            <h2 className="text-lg font-black uppercase tracking-wider text-black">{receiptHeading}</h2>
-            {receipt.storeName && receipt.storeName !== receiptHeading && <p className="text-[11px] font-semibold text-slate-700">{receipt.storeName}</p>}
-            {receipt.storeAddress && <p className="text-[10px] text-slate-500">{receipt.storeAddress}</p>}
-            {receipt.storePhone && <p className="text-[10px] text-slate-500">{receipt.storePhone}</p>}
-            <p className="text-[10px] text-slate-500">Receipt #{receipt.orderNumber}</p>
-            <p className="text-[10px] text-slate-500">{new Date(receipt.createdAt).toLocaleString()}</p>
+            <h2 className="text-lg font-black uppercase tracking-wider text-black">
+              {receiptHeading}
+            </h2>
+            {receipt.storeName && receipt.storeName !== receiptHeading && (
+              <p className="text-[11px] font-semibold text-slate-700">
+                {receipt.storeName}
+              </p>
+            )}
+            {receipt.storeAddress && (
+              <p className="text-[10px] text-slate-500">
+                {receipt.storeAddress}
+              </p>
+            )}
+            {receipt.storePhone && (
+              <p className="text-[10px] text-slate-500">{receipt.storePhone}</p>
+            )}
+            <p className="text-[10px] text-slate-500">
+              Receipt #{receipt.orderNumber}
+            </p>
+            <p className="text-[10px] text-slate-500">
+              {new Date(receipt.createdAt).toLocaleString()}
+            </p>
           </div>
 
           {/* Customer / Cashier Info */}
           <div className="py-2.5 border-b border-dashed border-slate-400 space-y-0.5 text-[10px] text-slate-700">
             <div className="flex justify-between">
               <span>Cashier:</span>
-              <span className="font-semibold">{receipt.cashierName || "Staff"}</span>
+              <span className="font-semibold">
+                {receipt.cashierName || "Staff"}
+              </span>
             </div>
             {receipt.payments?.map((payment, index) => (
-              <div key={payment.method + index} className="flex justify-between">
+              <div
+                key={payment.method + index}
+                className="flex justify-between"
+              >
                 <span>{payment.method.replace(/_/g, " ")}:</span>
-                <span className="font-semibold">{payment.amount.toLocaleString()} MMK</span>
+                <span className="font-semibold">
+                  {payment.amount.toLocaleString()} MMK
+                </span>
               </div>
             ))}
             <div className="flex justify-between">
               <span>Payment:</span>
-              <span className="font-semibold uppercase">{receipt.paymentMethod}</span>
+              <span className="font-semibold uppercase">
+                {receipt.paymentMethod}
+              </span>
             </div>
           </div>
 
@@ -180,8 +215,12 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
               <div key={idx} className="space-y-0.5">
                 <div className="font-bold text-black truncate">{item.name}</div>
                 <div className="flex justify-between text-[11px] text-slate-700">
-                  <span>{item.quantity} x {item.unitPrice.toLocaleString()}</span>
-                  <span className="font-semibold">{item.subTotal.toLocaleString()}</span>
+                  <span>
+                    {item.quantity} x {item.unitPrice.toLocaleString()}
+                  </span>
+                  <span className="font-semibold">
+                    {item.subTotal.toLocaleString()}
+                  </span>
                 </div>
               </div>
             ))}
@@ -209,25 +248,32 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
               <span>GRAND TOTAL:</span>
               <span>{receipt.grandTotal.toLocaleString()} MMK</span>
             </div>
-            {receipt.receivedAmount !== undefined && receipt.receivedAmount > 0 && (
-              <>
-                <div className="flex justify-between text-slate-700 pt-1">
-                  <span>Received:</span>
-                  <span>{receipt.receivedAmount.toLocaleString()} MMK</span>
-                </div>
-                <div className="flex justify-between text-slate-900 font-bold">
-                  <span>Change:</span>
-                  <span>{(receipt.changeAmount || 0).toLocaleString()} MMK</span>
-                </div>
-              </>
-            )}
+            {receipt.receivedAmount !== undefined &&
+              receipt.receivedAmount > 0 && (
+                <>
+                  <div className="flex justify-between text-slate-700 pt-1">
+                    <span>Received:</span>
+                    <span>{receipt.receivedAmount.toLocaleString()} MMK</span>
+                  </div>
+                  <div className="flex justify-between text-slate-900 font-bold">
+                    <span>Change:</span>
+                    <span>
+                      {(receipt.changeAmount || 0).toLocaleString()} MMK
+                    </span>
+                  </div>
+                </>
+              )}
           </div>
 
           {/* Footer Message */}
           <div className="pt-4 text-center space-y-1 text-[10px] text-slate-600">
-            <p className="font-semibold">{receipt.receiptFooter || "Thank you for shopping with us!"}</p>
+            <p className="font-semibold">
+              {receipt.receiptFooter || "Thank you for shopping with us!"}
+            </p>
             <p>Please keep this receipt for returns/warranty.</p>
-            <p className="text-[9px] text-slate-400 pt-2">Powered by Kanitt POS Systems</p>
+            <p className="text-[9px] text-slate-400 pt-2">
+              Powered by Kanitt POS Systems
+            </p>
           </div>
         </div>
 
@@ -250,4 +296,3 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
     </div>
   );
 }
-

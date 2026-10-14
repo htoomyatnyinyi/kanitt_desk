@@ -153,13 +153,17 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     isError: isStoresError,
     refetch: refetchStores,
   } = useGetStoresQuery();
-  const { data: apiSessions, refetch: refetchSessions } = useGetSessionsQuery({
-    storeId: selectedStore?.id,
-  });
+  const { data: apiSessions, refetch: refetchSessions } = useGetSessionsQuery(
+    { storeId: selectedStore?.id },
+    { pollingInterval: 5000, refetchOnFocus: true, refetchOnReconnect: true },
+  );
   const { data: apiStoreSettings = [] } = useGetStoreSettingsQuery(
     { storeId: selectedStore?.id },
     { skip: !selectedStore?.id },
   );
+  const registerSessionMode = String(
+    apiStoreSettings.find((setting: any) => setting.settingKey === "register_session_mode")?.settingValue ?? "SHARED",
+  ).toUpperCase() === "INDIVIDUAL" ? "INDIVIDUAL" : "SHARED";
   const {
     data: apiOrders = [],
     isLoading: isOrdersLoading,
@@ -519,13 +523,25 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       return;
     }
     if (isConnected && selectedStore) {
-      const activeSession = (apiSessions ?? []).find(
+      let currentSessions = apiSessions ?? [];
+      let activeSession = currentSessions.find(
         (session) =>
-          session.storeId === selectedStore.id && session.status === "OPEN",
+          session.storeId === selectedStore.id && session.status === "OPEN" &&
+          (registerSessionMode === "SHARED" || session.userId === authUser?.id),
       );
       if (!activeSession) {
+        const refreshed = await refetchSessions();
+        currentSessions = refreshed.data ?? currentSessions;
+        activeSession = currentSessions.find(
+          (session) => session.storeId === selectedStore.id && session.status === "OPEN" &&
+            (registerSessionMode === "SHARED" || session.userId === authUser?.id),
+        );
+      }
+      if (!activeSession) {
         setCheckoutError(
-          "Open a register session for this store before completing a sale.",
+          registerSessionMode === "SHARED"
+            ? "There is no open register session for this store. Open the register before checkout."
+            : "Open your own register session before completing a sale.",
         );
         return;
       }
@@ -926,6 +942,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           orders={apiOrders}
           storeId={selectedStore?.id}
           storeName={selectedStore?.name}
+          userId={authUser?.id}
+          userRole={userRole}
+          sessionMode={registerSessionMode}
           onOpen={(storeId, openingBalance) =>
             openRegisterSession({ storeId, openingBalance }).unwrap()
           }
@@ -948,6 +967,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           canEditStoreSettings={["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(
             userRole,
           )}
+          canEditRegisterSessionMode={["ADMIN", "SUPER_ADMIN"].includes(userRole)}
         />
       )}
 

@@ -18,11 +18,13 @@ export function SettingsView({
   storeName,
   storeId,
   canEditStoreSettings,
+  canEditRegisterSessionMode,
 }: {
   connected: boolean;
   storeName?: string;
   storeId?: string;
   canEditStoreSettings: boolean;
+  canEditRegisterSessionMode: boolean;
 }) {
   // const configuredApi = import.meta.env.VITE_API_URL || "http://localhost:6060";
   const configuredApi =
@@ -34,12 +36,34 @@ export function SettingsView({
     "Thank you for shopping with us!",
   );
   const [storeSaveMessage, setStoreSaveMessage] = useState("");
+  const [sessionModeMessage, setSessionModeMessage] = useState("");
   const { data: storeSettings = [] } = useGetStoreSettingsQuery(
     { storeId },
     { skip: !storeId },
   );
   const [upsertStoreSetting, { isLoading: savingStoreSettings }] =
     useUpsertStoreSettingMutation();
+  const registerSessionMode = String(
+    storeSettings.find((item: any) => item.settingKey === "register_session_mode")?.settingValue ?? "SHARED",
+  ).toUpperCase() === "INDIVIDUAL" ? "INDIVIDUAL" : "SHARED";
+
+  const saveRegisterSessionMode = async (mode: "SHARED" | "INDIVIDUAL") => {
+    if (!storeId || !canEditRegisterSessionMode) return;
+    setSessionModeMessage("");
+    try {
+      await upsertStoreSetting({
+        storeId,
+        settingKey: "register_session_mode",
+        settingValue: mode,
+        description: "Controls whether a register session is shared by the store or belongs to one staff member.",
+      }).unwrap();
+      setSessionModeMessage(mode === "SHARED"
+        ? "Shared register mode saved. Cashiers can use the store's open session."
+        : "Individual shift mode saved. Each staff member opens and closes their own session.");
+    } catch (error: any) {
+      setSessionModeMessage(error?.data?.message || error?.message || "Could not save register session mode.");
+    }
+  };
 
   useEffect(() => {
     try {
@@ -142,6 +166,30 @@ export function SettingsView({
       </div>
 
       <div className="grid max-w-4xl grid-cols-1 gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 md:col-span-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Register session policy</h3>
+          <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">Choose how this store tracks cash drawer shifts. In shared mode one open register session serves every cashier; only its opener or an administrator can close it. In individual mode each staff member has a separate session.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {([
+              ["SHARED", "Shared store register", "Recommended for a common till. Any cashier can check out against the active store session."],
+              ["INDIVIDUAL", "Individual staff shifts", "Each cashier must open their own shift and can close only their own session."],
+            ] as const).map(([mode, title, description]) => (
+              <button
+                key={mode}
+                type="button"
+                disabled={!canEditRegisterSessionMode || savingStoreSettings}
+                onClick={() => void saveRegisterSessionMode(mode)}
+                aria-pressed={registerSessionMode === mode}
+                className={`rounded-xl border p-4 text-left transition ${registerSessionMode === mode ? "border-sky-400/60 bg-sky-400/10" : "border-slate-700 bg-slate-950/50 hover:border-slate-600"} disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <span className="flex items-center justify-between text-sm font-bold text-white">{title}<span className={`h-3 w-3 rounded-full border ${registerSessionMode === mode ? "border-sky-300 bg-sky-300" : "border-slate-600"}`} /></span>
+                <span className="mt-2 block text-xs leading-5 text-slate-400">{description}</span>
+              </button>
+            ))}
+          </div>
+          {sessionModeMessage && <p role="status" className="mt-3 text-xs text-slate-300">{sessionModeMessage}</p>}
+          {!canEditRegisterSessionMode && <p className="mt-3 text-[10px] text-slate-500">Only an administrator can change this store-wide policy.</p>}
+        </section>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
           <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
             Active Workspace
