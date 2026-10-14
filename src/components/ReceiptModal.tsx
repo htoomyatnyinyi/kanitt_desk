@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { Printer, X, Check } from "lucide-react";
 
 export interface ReceiptData {
@@ -33,8 +33,68 @@ interface ReceiptModalProps {
   onClose: () => void;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Print helper — clones receipt HTML into a top-level container,     */
+/*  prints it, then removes it. Works reliably in Tauri / all webviews */
+/* ------------------------------------------------------------------ */
+const PRINT_CONTAINER_ID = "kanitt-receipt-print-container";
+
+function printReceiptElement(sourceEl: HTMLElement, paperWidth: string) {
+  // Remove any leftover container from a previous print
+  document.getElementById(PRINT_CONTAINER_ID)?.remove();
+
+  // Create a fresh container directly on <body>
+  const container = document.createElement("div");
+  container.id = PRINT_CONTAINER_ID;
+  container.innerHTML = sourceEl.innerHTML;
+
+  // Inject a self-contained print stylesheet
+  const style = document.createElement("style");
+  style.textContent = `
+    @media print {
+      body > *:not(#${PRINT_CONTAINER_ID}) { display: none !important; }
+      #${PRINT_CONTAINER_ID} {
+        display: block !important;
+        position: static !important;
+        width: ${paperWidth}mm !important;
+        padding: 2mm !important;
+        margin: 0 !important;
+        background: #fff !important;
+        color: #000 !important;
+        font-family: monospace !important;
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+        visibility: visible !important;
+      }
+      #${PRINT_CONTAINER_ID} * {
+        visibility: visible !important;
+        color: inherit !important;
+      }
+      #${PRINT_CONTAINER_ID} h2 { font-size: 16px !important; font-weight: 900 !important; }
+    }
+    @media screen {
+      #${PRINT_CONTAINER_ID} { display: none !important; }
+    }
+    @page { size: auto; margin: 2mm; }
+  `;
+
+  container.prepend(style);
+  document.body.appendChild(container);
+
+  // Print, then clean up
+  window.setTimeout(() => {
+    window.print();
+    // Remove after printing (give browser time to finish)
+    window.setTimeout(() => {
+      document.getElementById(PRINT_CONTAINER_ID)?.remove();
+    }, 500);
+  }, 100);
+}
+
 export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
   const autoPrintedReceipt = useRef<string | null>(null);
+  const receiptRef = useRef<HTMLDivElement>(null);
+
   const printerProfile = receipt?.storeId
     ? localStorage.getItem("kanitt:printer-profile:" + receipt.storeId)
     : null;
@@ -46,25 +106,27 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
     autoPrintReceipt = preferences.autoPrintReceipt === true;
   } catch {}
 
+  const handlePrint = useCallback(() => {
+    if (receiptRef.current) {
+      printReceiptElement(receiptRef.current, paperWidth);
+    }
+  }, [paperWidth]);
+
   useEffect(() => {
     if (!receipt || !receipt.allowAutoPrint || !autoPrintReceipt || autoPrintedReceipt.current === receipt.orderNumber) return;
     autoPrintedReceipt.current = receipt.orderNumber;
-    window.setTimeout(() => window.print(), 150);
-  }, [receipt?.orderNumber, autoPrintReceipt]);
+    // Delay to allow DOM to render
+    window.setTimeout(() => handlePrint(), 300);
+  }, [receipt?.orderNumber, autoPrintReceipt, handlePrint]);
 
   if (!receipt) return null;
   const receiptHeading = receipt.receiptHeader || "KANITT RETAIL";
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm print:p-0 print:bg-white print:static">
-      <style>{"@page { size: auto; margin: 2mm; }"}</style>
-      <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl print:border-0 print:bg-white print:p-0 print:shadow-none print:max-w-none print:w-full">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+      <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800 print:hidden">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2 text-emerald-400">
             <Check className="h-5 w-5" />
             <h3 className="font-bold text-white">Order Completed</h3>
@@ -77,8 +139,8 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
           </button>
         </div>
 
-        {/* Printable Thermal Receipt Area */}
-        <div className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner print:my-0 print:mx-auto print:p-0 print:shadow-none print:overflow-visible" style={{ width: paperWidth + "mm" }}>
+        {/* Receipt Preview Area (also used as source for printing) */}
+        <div ref={receiptRef} className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner" style={{ width: paperWidth + "mm" }}>
           {/* Header & Logo */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
             <h2 className="text-lg font-black uppercase tracking-wider text-black">{receiptHeading}</h2>
@@ -170,7 +232,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3 pt-2 print:hidden">
+        <div className="flex items-center gap-3 pt-2">
           <button
             onClick={onClose}
             className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 text-xs font-bold text-slate-300 transition hover:bg-slate-700 hover:text-white"
@@ -188,3 +250,4 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
     </div>
   );
 }
+
