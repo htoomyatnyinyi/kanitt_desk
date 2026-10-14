@@ -5,8 +5,23 @@ if (!/\/api$/i.test(_base)) _base = `${_base}/api`;
 const SERVER_URL = _base;
 export const resolveMediaUrl = (path?: string) => {
   if (!path) return "";
-  if (/^https?:\/\//i.test(path)) return path;
-  return `${SERVER_URL.replace(/\/api$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const origin = SERVER_URL.replace(/\/api$/i, "");
+  if (/^https?:\/\//i.test(path)) {
+    try {
+      const parsed = new URL(path);
+      // SeaweedFS internal/container URLs are not reachable from the POS
+      // device. Convert object keys back to the public API media proxy URL.
+      const filerObject = parsed.pathname.match(/\/tenants\/[^/]+\/products\/([^/]+)\.[a-z0-9]+$/i);
+      if (filerObject && /seaweedfs|localhost|127\.0\.0\.1/i.test(parsed.hostname)) {
+        return `${origin}/api/media/${encodeURIComponent(filerObject[1])}`;
+      }
+      return path;
+    } catch {
+      return path;
+    }
+  }
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${origin}${normalizedPath}`;
 };
 
 export interface ApiProduct {

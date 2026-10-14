@@ -1,5 +1,6 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { Printer, X, Check } from "lucide-react";
+import { printIsolatedHtml, printToDefaultPrinter } from "../services/print";
 
 export interface ReceiptData {
   orderNumber: string;
@@ -33,84 +34,140 @@ interface ReceiptModalProps {
   onClose: () => void;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Print helper — clones receipt HTML into a top-level container,     */
-/*  prints it, then removes it. Works reliably in Tauri / all webviews */
-/* ------------------------------------------------------------------ */
-const PRINT_CONTAINER_ID = "kanitt-receipt-print-container";
+/* Print a dedicated iframe document so the POS shell can never appear on paper. */
 
-function printReceiptElement(sourceEl: HTMLElement, paperWidth: string) {
-  // Remove any leftover container from a previous print
-  document.getElementById(PRINT_CONTAINER_ID)?.remove();
+type PrintFormat = "receipt" | "a4";
 
-  // Create a fresh container directly on <body>
-  const container = document.createElement("div");
-  container.id = PRINT_CONTAINER_ID;
-  container.innerHTML = sourceEl.innerHTML;
+function cleanPrintText(value: string) {
+  return String(value || "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+}
 
-  // Inject a self-contained print stylesheet
-  const style = document.createElement("style");
-  style.textContent = `
-    @media print {
-      body > *:not(#${PRINT_CONTAINER_ID}) { display: none !important; }
-      #${PRINT_CONTAINER_ID} {
-        display: block !important;
-        position: static !important;
-        width: ${paperWidth}mm !important;
-        padding: 2mm !important;
+function wrapPrintText(value: string, width: number) {
+  const words = cleanPrintText(value).split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const chunks = word.length > width
+      ? word.match(new RegExp(`.{1,${width}}`, "gu")) || [word]
+      : [word];
+    for (const chunk of chunks) {
+      if (line && line.length + chunk.length + 1 > width) {
+        lines.push(line);
+        line = chunk;
+      } else {
+        line = line ? `${line} ${chunk}` : chunk;
+      }
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function formatReceiptText(receipt: ReceiptData, format: PrintFormat, paperWidth: string) {
+  const columns = format === "a4" ? 90 : paperWidth === "58" ? 32 : 48;
+  const separator = "-".repeat(columns);
+  const center = (value: string) => {
+    const text = cleanPrintText(value);
+    return text.length >= columns ? text : " ".repeat(Math.floor((columns - text.length) / 2)) + text;
+  };
+  const pair = (label: string, value: string) => {
+    const left = cleanPrintText(label);
+    const right = cleanPrintText(value);
+    return left.length + right.length + 1 <= columns
+      ? `${left}${" ".repeat(columns - left.length - right.length)}${right}`
+      : `${left}\n${right.padStart(columns)}`;
+  };
+  const lines = [
+    center(receipt.receiptHeader || receipt.storeName || "KANITT RETAIL"),
+    ...(receipt.storeName && receipt.storeName !== receipt.receiptHeader ? wrapPrintText(receipt.storeName, columns).map(center) : []),
+    ...wrapPrintText(receipt.storeAddress || "", columns).map(center),
+    receipt.storePhone ? center(receipt.storePhone) : "",
+    separator,
+    pair("Receipt", receipt.orderNumber),
+    pair("Date", new Date(receipt.createdAt).toLocaleString()),
+    pair("Cashier", receipt.cashierName || "Staff"),
+    separator,
+    ...receipt.items.flatMap((item) => [
+      ...wrapPrintText(item.name, columns),
+      pair(`${item.quantity} x ${item.unitPrice.toLocaleString()}`, `${item.subTotal.toLocaleString()} MMK`),
+    ]),
+    separator,
+    pair("Subtotal", `${receipt.subTotal.toLocaleString()} MMK`),
+    ...(receipt.discountAmount > 0 ? [pair("Discount", `-${receipt.discountAmount.toLocaleString()} MMK`)] : []),
+    ...(receipt.taxAmount > 0 ? [pair("Tax", `${receipt.taxAmount.toLocaleString()} MMK`)] : []),
+    pair("TOTAL", `${receipt.grandTotal.toLocaleString()} MMK`),
+    ...(receipt.payments?.length
+      ? receipt.payments.map((payment) => pair(payment.method.replace(/_/g, " "), `${payment.amount.toLocaleString()} MMK`))
+      : [pair("Payment", receipt.paymentMethod)]),
+    ...(receipt.receivedAmount !== undefined ? [pair("Received", `${receipt.receivedAmount.toLocaleString()} MMK`)] : []),
+    ...(receipt.changeAmount !== undefined ? [pair("Change", `${receipt.changeAmount.toLocaleString()} MMK`)] : []),
+    separator,
+    ...wrapPrintText(receipt.receiptFooter || "Thank you for shopping with us!", columns).map(center),
+    "",
+  ];
+  return lines.filter((line, index) => line || (index > 0 && lines[index - 1] !== "")).join("\n");
+}
+
+async function printReceiptElement(sourceEl: HTMLElement, receipt: ReceiptData, paperWidth: string, format: PrintFormat, printerName?: string) {
+  try {
+    if (await printToDefaultPrinter(formatReceiptText(receipt, format, paperWidth), printerName)) return;
+  } catch {
+    // If the native spooler is unavailable, fall back to the OS print dialog.
+  }
+  const pageSize = format === "a4" ? "A4 portrait" : `${paperWidth}mm auto`;
+  const contentWidth = format === "a4" ? "190mm" : `${paperWidth}mm`;
+  printIsolatedHtml(`<main id="kanitt-print-root">${sourceEl.innerHTML}</main>`, `
+    @page { size: ${pageSize}; margin: ${format === "a4" ? "10mm" : "0"}; }
+    html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+    #kanitt-print-root {
+        box-sizing: border-box !important;
+        width: ${contentWidth} !important;
+        max-width: ${contentWidth} !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: ${format === "a4" ? "8mm" : "2mm"} !important;
         margin: 0 !important;
         background: #fff !important;
         color: #000 !important;
         font-family: monospace !important;
-        font-size: 12px !important;
+        font-size: ${format === "a4" ? "10pt" : "12px"} !important;
         line-height: 1.4 !important;
-        visibility: visible !important;
-      }
-      #${PRINT_CONTAINER_ID} * {
-        visibility: visible !important;
-        color: inherit !important;
-      }
-      #${PRINT_CONTAINER_ID} h2 { font-size: 16px !important; font-weight: 900 !important; }
     }
-    @media screen {
-      #${PRINT_CONTAINER_ID} { display: none !important; }
-    }
-    @page { size: auto; margin: 2mm; }
-  `;
-
-  container.prepend(style);
-  document.body.appendChild(container);
-
-  // Print, then clean up
-  window.setTimeout(() => {
-    window.print();
-    // Remove after printing (give browser time to finish)
-    window.setTimeout(() => {
-      document.getElementById(PRINT_CONTAINER_ID)?.remove();
-    }, 500);
-  }, 100);
+    #kanitt-print-root * { color: #000 !important; visibility: visible !important; }
+    #kanitt-print-root h2 { font-size: ${format === "a4" ? "22pt" : "16px"} !important; font-weight: 900 !important; }
+  `);
 }
 
 export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
   const autoPrintedReceipt = useRef<string | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [previewFormat, setPreviewFormat] = useState<PrintFormat>("receipt");
 
   const printerProfile = receipt?.storeId
     ? localStorage.getItem("kanitt:printer-profile:" + receipt.storeId)
     : null;
   let paperWidth: "58" | "80" = "80";
+  let defaultFormat: PrintFormat = "receipt";
+  let printerName = "";
   let autoPrintReceipt = false;
   try {
     const preferences = printerProfile ? JSON.parse(printerProfile) : {};
     paperWidth = preferences.paperWidth === "58" ? "58" : "80";
+    defaultFormat = preferences.defaultFormat === "a4" ? "a4" : "receipt";
+    printerName = typeof preferences.printerName === "string" ? preferences.printerName : "";
     autoPrintReceipt = preferences.autoPrintReceipt === true;
   } catch {}
 
-  const handlePrint = useCallback(() => {
-    if (receiptRef.current) {
-      printReceiptElement(receiptRef.current, paperWidth);
+  const handlePrint = useCallback((format: PrintFormat = defaultFormat) => {
+    if (receiptRef.current && receipt) {
+      void printReceiptElement(receiptRef.current, receipt, paperWidth, format, printerName);
     }
-  }, [paperWidth]);
+  }, [receipt, paperWidth, defaultFormat, printerName]);
+
+  useEffect(() => {
+    setPreviewFormat(defaultFormat);
+  }, [receipt?.orderNumber, defaultFormat]);
 
   useEffect(() => {
     if (
@@ -122,8 +179,8 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
       return;
     autoPrintedReceipt.current = receipt.orderNumber;
     // Delay to allow DOM to render
-    window.setTimeout(() => handlePrint(), 300);
-  }, [receipt?.orderNumber, autoPrintReceipt, handlePrint]);
+    window.setTimeout(() => handlePrint(defaultFormat), 300);
+  }, [receipt?.orderNumber, autoPrintReceipt, defaultFormat, handlePrint]);
 
   if (!receipt) return null;
   const receiptHeading = receipt.receiptHeader || "KANITT RETAIL";
@@ -148,8 +205,8 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         {/* Receipt Preview Area (also used as source for printing) */}
         <div
           ref={receiptRef}
-          className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner"
-          style={{ width: paperWidth + "mm" }}
+          className="my-4 min-h-0 flex-1 overflow-y-auto self-center rounded-2xl bg-white p-5 font-mono text-xs text-slate-900 shadow-inner"
+          style={{ width: previewFormat === "a4" ? "100%" : paperWidth + "mm", maxWidth: "100%" }}
         >
           {/* Header & Logo */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
@@ -278,19 +335,27 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex flex-wrap items-center gap-2 pt-2">
           <button
             onClick={onClose}
             className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 text-xs font-bold text-slate-300 transition hover:bg-slate-700 hover:text-white"
           >
             Close
           </button>
-          <button
-            onClick={handlePrint}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 py-3 text-xs font-bold text-slate-950 transition hover:bg-sky-300"
-          >
-            <Printer className="h-4 w-4" /> Print Thermal
-          </button>
+          <div className="flex flex-1 gap-2">
+            <button
+              onClick={() => { setPreviewFormat("receipt"); handlePrint("receipt"); }}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-400 py-3 text-xs font-bold text-slate-950 transition hover:bg-sky-300"
+            >
+              <Printer className="h-4 w-4" /> Receipt {paperWidth}mm{defaultFormat === "receipt" ? " · Default" : ""}
+            </button>
+            <button
+              onClick={() => { setPreviewFormat("a4"); handlePrint("a4"); }}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-sky-400/50 bg-slate-800 py-3 text-xs font-bold text-sky-200 transition hover:bg-slate-700"
+            >
+              <Printer className="h-4 w-4" /> A4 page{defaultFormat === "a4" ? " · Default" : ""}
+            </button>
+          </div>
         </div>
       </div>
     </div>
