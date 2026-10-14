@@ -29,6 +29,7 @@ import {
   useCreateStaffMutation,
   useUpdateStaffMutation,
   useAdjustStockMutation,
+  useGetInventoryMovementsQuery,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,
@@ -148,6 +149,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     isError: isProductsError,
     refetch: refetchProducts,
   } = useGetProductsQuery({ storeId: selectedStore?.id });
+  const { data: inventoryMovements = [] } = useGetInventoryMovementsQuery(
+    { storeId: selectedStore?.id },
+    { skip: !selectedStore?.id },
+  );
   const {
     data: apiStores,
     isError: isStoresError,
@@ -700,6 +705,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         selectedStore={selectedStore}
         setSelectedStore={setSelectedStore}
         storeError={isStoresError}
+        hasQueuedSales={queuedSales.length > 0}
         onLogout={onLogout}
       />
 
@@ -911,6 +917,74 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         <InventoryView
           storeId={selectedStore?.id}
           userRole={userRole}
+          userPermissions={userPermissions}
+          stores={transferDestinationStores.map((store) => ({ id: store.id, name: store.name }))}
+          suppliers={suppliers.map((supplier: any) => ({
+            id: supplier.id,
+            name: supplier.name,
+            leadTimeDays: supplier.leadTimeDays,
+          }))}
+          movements={inventoryMovements}
+          onAdjustStock={(payload) =>
+            adjustStock({
+              storeId: selectedStore!.id,
+              productId: payload.productId,
+              variantId: payload.variantId,
+              lotId: payload.lotId,
+              quantityIsBaseUnit: payload.quantityIsBaseUnit,
+              quantity: payload.quantity,
+              movementType: payload.reason.toLowerCase().includes("expired")
+                ? "EXPIRED"
+                : payload.reason.toLowerCase().includes("damage") || payload.reason.toLowerCase().includes("quarantine")
+                  ? "DAMAGE"
+                  : "ADJUSTMENT",
+              reason: [payload.reason, payload.notes].filter(Boolean).join(" · "),
+            }).unwrap()
+          }
+          onDisposeStock={(payload) =>
+            adjustStock({
+              storeId: selectedStore!.id,
+              productId: payload.productId,
+              variantId: payload.variantId,
+              lotId: payload.lotId,
+              quantityIsBaseUnit: true,
+              quantity: payload.quantity,
+              movementType: payload.reason === "expired_disposal" ? "EXPIRED" : "DAMAGE",
+              reason: [payload.reason, payload.notes].filter(Boolean).join(" · "),
+            }).unwrap()
+          }
+          onTransferStock={(payload) =>
+            createTransfer({
+              fromStoreId: payload.fromStoreId,
+              toStoreId: payload.toStoreId,
+              notes: payload.notes,
+              items: [{
+                productId: payload.productId,
+                variantId: payload.variantId,
+                quantity: payload.quantity,
+              }],
+            }).unwrap()
+          }
+          onCreatePurchaseOrder={(po) =>
+            createPurchaseOrder({
+              storeId: po.storeId,
+              supplierId: po.supplierId,
+              status: po.status,
+              expectedDate: po.expectedDate,
+              subTotal: po.subtotal,
+              taxAmount: 0,
+              grandTotal: po.total,
+              currencyCode: "MMK",
+              notes: po.notes,
+              items: po.lines.map((line) => ({
+                productId: line.productId,
+                variantId: line.variantId,
+                quantity: line.quantity,
+                unitCost: line.unitCost,
+                totalCost: line.quantity * line.unitCost,
+              })),
+            }).unwrap()
+          }
           onRequestSubmitted={() => setActiveTab("requests")}
           products={products.flatMap((product) =>
             (product.variants ?? []).map((variant) => ({
