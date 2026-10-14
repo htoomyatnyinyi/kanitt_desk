@@ -272,7 +272,9 @@ export function PosView({
             <div
               key={product.id}
               onClick={() =>
-                variants.length > 0 && !isOutOfStock && handleProductClick(product)
+                variants.length > 0 &&
+                !isOutOfStock &&
+                handleProductClick(product)
               }
               className={`group bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 ${variantCount === 0 ? "opacity-50" : isOutOfStock ? "opacity-60" : "hover:bg-slate-900 hover:border-sky-500/50 hover:shadow-xl hover:shadow-sky-500/5"} ${variantCount > 0 && !isOutOfStock ? "cursor-pointer active:scale-[0.98]" : ""}`}
             >

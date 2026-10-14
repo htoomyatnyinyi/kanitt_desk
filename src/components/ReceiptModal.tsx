@@ -61,7 +61,28 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm print:p-0 print:bg-white print:static">
-      <style>{"@page { size: auto; margin: 2mm; }"}</style>
+      <style>{`
+        @page { size: auto; margin: 2mm; }
+        @media print {
+          body > * { visibility: hidden !important; }
+          #kanitt-receipt-print,
+          #kanitt-receipt-print * { visibility: visible !important; }
+          #kanitt-receipt-print {
+            position: fixed !important;
+            left: 0; top: 0;
+            width: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            overflow: visible !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+          }
+        }
+      `}</style>
       <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl print:border-0 print:bg-white print:p-0 print:shadow-none print:max-w-none print:w-full">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800 print:hidden">
@@ -78,7 +99,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Printable Thermal Receipt Area */}
-        <div className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner print:my-0 print:mx-auto print:p-0 print:shadow-none print:overflow-visible" style={{ width: paperWidth + "mm" }}>
+        <div id="kanitt-receipt-print" className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner print:my-0 print:mx-auto print:p-0 print:shadow-none print:overflow-visible" style={{ width: paperWidth + "mm" }}>
           {/* Header & Logo */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
             <h2 className="text-lg font-black uppercase tracking-wider text-black">{receiptHeading}</h2>
