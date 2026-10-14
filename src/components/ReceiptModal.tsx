@@ -1,9 +1,16 @@
+import { useEffect, useRef } from "react";
 import { Printer, X, Check } from "lucide-react";
 
 export interface ReceiptData {
   orderNumber: string;
   createdAt: string;
   storeName?: string;
+  storeAddress?: string;
+  storePhone?: string;
+  storeId?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
+  allowAutoPrint?: boolean;
   items: Array<{
     name: string;
     quantity: number;
@@ -15,6 +22,7 @@ export interface ReceiptData {
   discountAmount: number;
   grandTotal: number;
   paymentMethod: string;
+  payments?: { method: string; amount: number }[];
   receivedAmount?: number;
   changeAmount?: number;
   cashierName?: string;
@@ -26,7 +34,26 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
+  const autoPrintedReceipt = useRef<string | null>(null);
+  const printerProfile = receipt?.storeId
+    ? localStorage.getItem("kanitt:printer-profile:" + receipt.storeId)
+    : null;
+  let paperWidth: "58" | "80" = "80";
+  let autoPrintReceipt = false;
+  try {
+    const preferences = printerProfile ? JSON.parse(printerProfile) : {};
+    paperWidth = preferences.paperWidth === "58" ? "58" : "80";
+    autoPrintReceipt = preferences.autoPrintReceipt === true;
+  } catch {}
+
+  useEffect(() => {
+    if (!receipt || !receipt.allowAutoPrint || !autoPrintReceipt || autoPrintedReceipt.current === receipt.orderNumber) return;
+    autoPrintedReceipt.current = receipt.orderNumber;
+    window.setTimeout(() => window.print(), 150);
+  }, [receipt?.orderNumber, autoPrintReceipt]);
+
   if (!receipt) return null;
+  const receiptHeading = receipt.receiptHeader || "KANITT RETAIL";
 
   const handlePrint = () => {
     window.print();
@@ -34,6 +61,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm print:p-0 print:bg-white print:static">
+      <style>{"@page { size: auto; margin: 2mm; }"}</style>
       <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl print:border-0 print:bg-white print:p-0 print:shadow-none print:max-w-none print:w-full">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800 print:hidden">
@@ -50,11 +78,13 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Printable Thermal Receipt Area */}
-        <div className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner print:p-0 print:shadow-none print:overflow-visible">
+        <div className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner print:my-0 print:mx-auto print:p-0 print:shadow-none print:overflow-visible" style={{ width: paperWidth + "mm" }}>
           {/* Header & Logo */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
-            <h2 className="text-lg font-black uppercase tracking-wider text-black">KANITT RETAIL</h2>
-            <p className="text-[11px] font-semibold text-slate-700">{receipt.storeName || "Main Branch"}</p>
+            <h2 className="text-lg font-black uppercase tracking-wider text-black">{receiptHeading}</h2>
+            {receipt.storeName && receipt.storeName !== receiptHeading && <p className="text-[11px] font-semibold text-slate-700">{receipt.storeName}</p>}
+            {receipt.storeAddress && <p className="text-[10px] text-slate-500">{receipt.storeAddress}</p>}
+            {receipt.storePhone && <p className="text-[10px] text-slate-500">{receipt.storePhone}</p>}
             <p className="text-[10px] text-slate-500">Receipt #{receipt.orderNumber}</p>
             <p className="text-[10px] text-slate-500">{new Date(receipt.createdAt).toLocaleString()}</p>
           </div>
@@ -65,6 +95,12 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
               <span>Cashier:</span>
               <span className="font-semibold">{receipt.cashierName || "Staff"}</span>
             </div>
+            {receipt.payments?.map((payment, index) => (
+              <div key={payment.method + index} className="flex justify-between">
+                <span>{payment.method.replace(/_/g, " ")}:</span>
+                <span className="font-semibold">{payment.amount.toLocaleString()} MMK</span>
+              </div>
+            ))}
             <div className="flex justify-between">
               <span>Payment:</span>
               <span className="font-semibold uppercase">{receipt.paymentMethod}</span>
@@ -127,7 +163,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
 
           {/* Footer Message */}
           <div className="pt-4 text-center space-y-1 text-[10px] text-slate-600">
-            <p className="font-semibold">Thank you for shopping with us!</p>
+            <p className="font-semibold">{receipt.receiptFooter || "Thank you for shopping with us!"}</p>
             <p>Please keep this receipt for returns/warranty.</p>
             <p className="text-[9px] text-slate-400 pt-2">Powered by Kanitt POS Systems</p>
           </div>

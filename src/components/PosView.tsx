@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Search, Plus, Barcode, X, Layers } from "lucide-react";
 import { Product } from "../types";
+import { resolveMediaUrl } from "../services/api";
 
 /* ------------------------------------------------------------------ */
 /*  Variant helpers                                                    */
@@ -15,6 +16,7 @@ export type Variant = {
   price?: number;
   costPrice?: number;
   stock?: number;
+  availableStock?: number;
 };
 
 /**
@@ -136,6 +138,8 @@ export function PosView({
         return;
       }
       if (variants.length === 1) {
+        if (Number(variants[0].availableStock ?? variants[0].stock ?? 0) <= 0)
+          return;
         addToCart(product, variants[0]);
         return;
       }
@@ -182,7 +186,9 @@ export function PosView({
           (variant.sku || "").toLowerCase() === query,
       );
       if (variantHit) {
-        addToCart(product, variantHit);
+        if (Number(variantHit.availableStock ?? variantHit.stock ?? 0) > 0) {
+          addToCart(product, variantHit);
+        }
         setSearchQuery("");
         return;
       }
@@ -249,24 +255,46 @@ export function PosView({
       </div>
 
       {/* Product grid */}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4 flex-1">
+      {/* အပေါ်က Comment ဖြုတ်ပြီး ဒီလိုပြင်ပါ */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3.5 lg:gap-4 flex-1 content-start">
+        {/* <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3.5 lg:gap-4 flex-1"> */}
         {paginatedProducts.map((product) => {
           const variants = getVariants(product);
           const variantCount = variants.length;
+          const isOutOfStock =
+            variantCount > 0 &&
+            variants.every(
+              (variant) =>
+                Number(variant.availableStock ?? variant.stock ?? 0) <= 0,
+            );
 
           return (
             <div
               key={product.id}
-              onClick={() => variants.length > 0 && handleProductClick(product)}
-              className={`group bg-slate-900/70 hover:bg-slate-900 border border-slate-800/80 hover:border-sky-500/50 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:shadow-sky-500/5 ${variantCount > 0 ? "cursor-pointer active:scale-[0.98]" : "opacity-50"}`}
+              onClick={() =>
+                variants.length > 0 && !isOutOfStock && handleProductClick(product)
+              }
+              className={`group bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 ${variantCount === 0 ? "opacity-50" : isOutOfStock ? "opacity-60" : "hover:bg-slate-900 hover:border-sky-500/50 hover:shadow-xl hover:shadow-sky-500/5"} ${variantCount > 0 && !isOutOfStock ? "cursor-pointer active:scale-[0.98]" : ""}`}
             >
+              {(product.imageUrl || product.image) && (
+                <img
+                  src={resolveMediaUrl(product.imageUrl || product.image)}
+                  alt=""
+                  loading="lazy"
+                  className="mb-3 aspect-4/3 w-full rounded-xl bg-slate-800 object-cover"
+                />
+              )}
               <div>
                 <div className="flex justify-between items-start gap-2 mb-2">
                   <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 truncate max-w-[60%]">
                     {product.category || "Uncategorised"}
                   </span>
 
-                  {variantCount > 0 ? (
+                  {isOutOfStock ? (
+                    <span className="shrink-0 rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+                      Out of stock
+                    </span>
+                  ) : variantCount > 0 ? (
                     <span className="flex items-center gap-1 text-[10px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-full shrink-0">
                       <Layers className="w-3 h-3" />
                       {variantCount}
@@ -309,7 +337,8 @@ export function PosView({
                 <button
                   type="button"
                   aria-label={`Add ${product.name} to cart`}
-                  className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-sky-500 text-slate-300 group-hover:text-white flex items-center justify-center transition-all"
+                  disabled={isOutOfStock || variantCount === 0}
+                  className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-sky-500 text-slate-300 group-hover:text-white flex items-center justify-center transition-all disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -371,7 +400,7 @@ export function PosView({
       {/* ---------------------- Variant picker -------------------- */}
       {variantPicker && (
         <div
-          className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-80 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={closePicker}
           role="presentation"
         >
@@ -425,7 +454,8 @@ export function PosView({
             {/* Variant list */}
             <ul className="flex-1 overflow-y-auto p-2">
               {filteredVariants.map((variant) => {
-                const vStock = Number(variant.stock) || 0;
+                const vStock =
+                  Number(variant.availableStock ?? variant.stock) || 0;
                 const outOfStock = vStock <= 0;
                 const price = Number(variant.price ?? variantPicker.price) || 0;
                 const subtitle = variantSubtitle(variant);

@@ -1,6 +1,13 @@
-let _base = import.meta.env.VITE_API_URL || "https://pos.oasislab.de5.net";
-if (!_base.endsWith("/api")) _base = `${_base}/api`;
+let _base = (import.meta.env.VITE_API_URL || "https://dev.oasislab.de5.net")
+  .trim()
+  .replace(/\/+$/, "");
+if (!/\/api$/i.test(_base)) _base = `${_base}/api`;
 const SERVER_URL = _base;
+export const resolveMediaUrl = (path?: string) => {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${SERVER_URL.replace(/\/api$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+};
 
 export interface ApiProduct {
   id: string;
@@ -108,6 +115,124 @@ class ApiService {
     return this.request<ApiProduct[]>("/tenant/products");
   }
 
+  async uploadProductImage(file: File, storeId: string, productId?: string) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("storeId", storeId);
+    if (productId) form.append("productId", productId);
+    const response = await fetch(`${SERVER_URL}/tenant/media/images`, {
+      method: "POST",
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+      body: form,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Image upload failed.");
+    return data.imageUrl as string;
+  }
+
+  async getChatRooms() {
+    return this.request<{
+      rooms: {
+        stores: { id: string; name: string }[];
+        mainStoreId?: string;
+        canAccessMainChat: boolean;
+        canMessageAdmins: boolean;
+        adminThreads: { userId: string; name: string }[];
+        members: {
+          id: string;
+          name?: string;
+          username?: string;
+          role: string;
+        }[];
+      };
+    }>("/tenant/chat/rooms");
+  }
+
+  async getChatMessages(
+    roomId: string,
+    afterId?: string,
+    signal?: AbortSignal,
+  ) {
+    const params = afterId ? `?afterId=${encodeURIComponent(afterId)}` : "";
+    return this.request<{ messages: ChatMessage[]; hasMore?: boolean }>(
+      `/tenant/chat/${encodeURIComponent(roomId)}/messages${params}`,
+      { signal },
+    );
+  }
+
+  connectRealtime(
+    roomId: string,
+    onEvent: (event: any) => void,
+    onStatus: (ready: boolean) => void,
+  ) {
+    if (!this.token) return () => {};
+    const socketUrl = `${SERVER_URL}/realtime/`.replace(/^http/i, "ws");
+    let socket: WebSocket | undefined;
+    let retryTimer: number | undefined;
+    let stopped = false;
+    let retry = 0;
+    const open = () => {
+      if (stopped) return;
+      try {
+        socket = new WebSocket(socketUrl);
+      } catch {
+        scheduleRetry();
+        return;
+      }
+      socket.onopen = () =>
+        socket?.send(
+          JSON.stringify({ type: "auth", token: this.token, roomId }),
+        );
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(String(event.data));
+          if (payload.type === "ready") {
+            retry = 0;
+            onStatus(true);
+          } else if (payload.type === "error") onStatus(false);
+          else onEvent(payload);
+        } catch {
+          /* Ignore malformed server events and keep the connection alive. */
+        }
+      };
+      socket.onclose = () => {
+        onStatus(false);
+        scheduleRetry();
+      };
+      socket.onerror = () => {
+        onStatus(false);
+        socket?.close();
+      };
+    };
+    const scheduleRetry = () => {
+      if (stopped || retryTimer !== undefined) return;
+      retry += 1;
+      retryTimer = window.setTimeout(
+        () => {
+          retryTimer = undefined;
+          open();
+        },
+        Math.min(15000, 500 * 2 ** Math.min(retry, 5)),
+      );
+    };
+    open();
+    return () => {
+      stopped = true;
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+      socket?.close();
+    };
+  }
+
+  async sendChatMessage(roomId: string, body: string) {
+    return this.request<{ message: ChatMessage }>(
+      `/tenant/chat/${encodeURIComponent(roomId)}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      },
+    );
+  }
+
   // Fetch Active/All Sessions
   async getSessions() {
     return this.request<ApiSession[]>("/tenant/sessions");
@@ -147,6 +272,15 @@ class ApiService {
       body: JSON.stringify(orderData),
     });
   }
+}
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  senderId: string;
+  sender?: { name?: string; username?: string };
+  createdAt: string;
+  mine?: boolean;
 }
 
 export const apiService = new ApiService();

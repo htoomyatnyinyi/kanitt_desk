@@ -1,7 +1,8 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 // Use VITE_API_URL env var, or fall back to the live Cloudflare tunnel (same as kanitt_app)
-let BASE = import.meta.env.VITE_API_URL || "https://pos.oasislab.de5.net";
+let BASE = import.meta.env.VITE_API_URL || "https://dev.oasislab.de5.net";
+// let BASE = import.meta.env.VITE_API_URL || "http://localhost:6060";
 if (!BASE.endsWith("/api")) BASE = `${BASE}/api`;
 const API_BASE_URL = BASE;
 
@@ -24,6 +25,8 @@ export interface Product {
   price: number;
   sku: string;
   stock?: number;
+  baseUnitName?: string | null;
+  baseUnitVariantId?: string | null;
   inventories?: {
     quantity: number;
     lot?: {
@@ -41,6 +44,9 @@ export interface Product {
     barcode?: string;
     price: number;
     costPrice?: number;
+    unitFactor?: number;
+    stock?: number;
+    availableStock?: number;
   }[];
 }
 
@@ -49,6 +55,7 @@ export interface Store {
   name: string;
   code?: string;
   address?: string;
+  phone?: string;
   status?: string;
 }
 
@@ -74,6 +81,7 @@ export interface ApiOrder {
   orderNumber?: string;
   storeId: string;
   sessionId?: string | null;
+  store?: { name?: string; address?: string; phone?: string };
   createdAt: string;
   status: string;
   paymentStatus?: string;
@@ -161,8 +169,36 @@ export const kanittApi = createApi({
     "ApiKeys",
     "Subscription",
     "Notifications",
+    "StockRequests",
   ],
   endpoints: (builder) => ({
+    getStockRequests: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId }) => ({
+        url: "/tenant/stock-requests",
+        params: storeId ? { storeId } : {},
+      }),
+      transformResponse: (r: any) => r?.requests ?? [],
+      providesTags: ["StockRequests"],
+    }),
+    createStockRequest: builder.mutation<any, Record<string, unknown>>({
+      query: (body) => ({
+        url: "/tenant/stock-requests",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["StockRequests", "Notifications"],
+    }),
+    updateStockRequest: builder.mutation<
+      any,
+      { id: string; patch: Record<string, unknown> }
+    >({
+      query: ({ id, patch }) => ({
+        url: `/tenant/stock-requests/${id}`,
+        method: "PATCH",
+        body: patch,
+      }),
+      invalidatesTags: ["StockRequests", "Notifications"],
+    }),
     // Health Check
     getHealth: builder.query<
       { success: boolean; status: string; service: string },
@@ -182,6 +218,8 @@ export const kanittApi = createApi({
         return list.map((p: any) => ({
           id: p.id,
           name: p.name,
+          image: p.imageUrl,
+          imageUrl: p.imageUrl,
           category:
             typeof p.category === "object"
               ? p.category?.name || "General"
@@ -203,6 +241,9 @@ export const kanittApi = createApi({
             ? p.inventories.map((inventory: any) => ({
                 variantId: inventory.variantId,
                 quantity: Number(inventory.quantity) || 0,
+                reservedQty: Number(inventory.reservedQty) || 0,
+                reorderPoint: Number(inventory.reorderPoint) || 10,
+                reorderQty: Number(inventory.reorderQty) || 0,
                 lot: inventory.lot
                   ? {
                       number: inventory.lot.number,
@@ -220,13 +261,47 @@ export const kanittApi = createApi({
           dosageForm: p.dosageForm || "",
           manufacturer: p.manufacturer || "",
           registrationNumber: p.registrationNumber || "",
+          baseUnitName: p.baseUnitName || null,
+          baseUnitVariantId: p.baseUnitVariantId || null,
           variants: Array.isArray(p.variants)
             ? p.variants.map((v: any) => ({
                 id: v.id,
                 name: v.name,
                 sku: v.sku,
                 barcode: v.barcode || "",
+                unitFactor: Math.max(1, Number(v.unitFactor) || 1),
                 stock: Number(v.stock ?? 0),
+                availableStock: Array.isArray(p.inventories)
+                  ? Math.floor(
+                      p.inventories
+                        .filter(
+                          (inventory: any) =>
+                            inventory.variantId ===
+                            (p.baseUnitName && p.baseUnitVariantId
+                              ? p.baseUnitVariantId
+                              : v.id),
+                        )
+                        .filter((inventory: any) => {
+                          if (!inventory.lot?.expiryDate) return true;
+                          const expiry = new Date(inventory.lot.expiryDate);
+                          expiry.setUTCHours(23, 59, 59, 999);
+                          return expiry.getTime() >= Date.now();
+                        })
+                        .reduce(
+                          (sum: number, inventory: any) =>
+                            sum +
+                            Math.max(
+                              0,
+                              Number(inventory.quantity) -
+                                Number(inventory.reservedQty || 0),
+                            ),
+                          0,
+                        ) /
+                        (p.baseUnitName && p.baseUnitVariantId
+                          ? Math.max(1, Number(v.unitFactor) || 1)
+                          : 1),
+                    )
+                  : Number(v.stock ?? 0),
                 price: Number(v.price) || 0,
                 costPrice: Number(v.costPrice) || 0,
               }))
@@ -374,9 +449,17 @@ export const kanittApi = createApi({
         variantId?: string;
         quantity: number;
         reason: string;
+        movementType?: "ADJUSTMENT" | "DAMAGE" | "EXPIRED";
       }
     >({
-      query: ({ storeId, productId, variantId, quantity, reason }) => ({
+      query: ({
+        storeId,
+        productId,
+        variantId,
+        quantity,
+        reason,
+        movementType,
+      }) => ({
         url: "/tenant/inventory/movements",
         method: "POST",
         body: {
@@ -384,7 +467,7 @@ export const kanittApi = createApi({
           productId,
           variantId,
           quantity,
-          type: "ADJUSTMENT",
+          type: movementType || "ADJUSTMENT",
           referenceId: `DESKTOP-${crypto.randomUUID()}`,
           referenceType: "ManualAdjustment",
           reason,
@@ -441,7 +524,10 @@ export const kanittApi = createApi({
       invalidatesTags: ["PurchaseOrders", "Products", "Inventory"],
     }),
     getExpenses: builder.query<any[], { storeId?: string }>({
-      query: ({ storeId }) => ({ url: "/tenant/expenses", params: storeId ? { storeId } : {} }),
+      query: ({ storeId }) => ({
+        url: "/tenant/expenses",
+        params: storeId ? { storeId } : {},
+      }),
       transformResponse: (r: any) => unwrapList(r, "expenses"),
       providesTags: ["Expenses"],
     }),
@@ -499,17 +585,26 @@ export const kanittApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["StockTransfers"],
+      invalidatesTags: ["StockTransfers", "StockRequests", "Notifications"],
     }),
     completeStockTransfer: builder.mutation<any, string>({
       query: (id) => ({
         url: `/tenant/stock-transfers/${id}/complete`,
         method: "POST",
       }),
-      invalidatesTags: ["StockTransfers", "Products", "Inventory"],
+      invalidatesTags: [
+        "StockTransfers",
+        "Products",
+        "Inventory",
+        "StockRequests",
+        "Notifications",
+      ],
     }),
     getReturns: builder.query<any[], { storeId?: string }>({
-      query: ({ storeId }) => ({ url: "/tenant/returns", params: { limit: 10000, ...(storeId ? { storeId } : {}) } }),
+      query: ({ storeId }) => ({
+        url: "/tenant/returns",
+        params: { limit: 10000, ...(storeId ? { storeId } : {}) },
+      }),
       transformResponse: (r: any) => unwrapList(r, "returns"),
       providesTags: ["Returns"],
     }),
@@ -674,6 +769,23 @@ export const kanittApi = createApi({
       transformResponse: (res: any) => unwrapList(res, "stores"),
       providesTags: ["Stores"],
     }),
+    createStore: builder.mutation<Store, Record<string, unknown>>({
+      query: (body) => ({ url: "/tenant/stores", method: "POST", body }),
+      transformResponse: (res: any) => res?.store ?? res,
+      invalidatesTags: ["Stores"],
+    }),
+    updateStore: builder.mutation<
+      Store,
+      { id: string; patch: Record<string, unknown> }
+    >({
+      query: ({ id, patch }) => ({
+        url: `/tenant/stores/${id}`,
+        method: "PUT",
+        body: patch,
+      }),
+      transformResponse: (res: any) => res?.store ?? res,
+      invalidatesTags: ["Stores"],
+    }),
 
     // Sessions
     getSessions: builder.query<Session[], { storeId?: string }>({
@@ -763,6 +875,18 @@ export const kanittApi = createApi({
         method: "POST",
         body,
       }),
+    }),
+    verifyEmail: builder.mutation<
+      { success: boolean; token: string; user: any; message?: string },
+      { email: string; code: string }
+    >({
+      query: (body) => ({ url: "/auth/verify-email", method: "POST", body }),
+    }),
+    resendVerificationCode: builder.mutation<
+      { success: boolean; message: string },
+      { email: string }
+    >({
+      query: (body) => ({ url: "/auth/resend-otp", method: "POST", body }),
     }),
 
     // ── Admin: Tenant Profile ────────────────────────────────────────────
@@ -902,6 +1026,9 @@ export const kanittApi = createApi({
 });
 
 export const {
+  useGetStockRequestsQuery,
+  useCreateStockRequestMutation,
+  useUpdateStockRequestMutation,
   useGetHealthQuery,
   useGetProductsQuery,
   useCreateProductMutation,
@@ -955,6 +1082,8 @@ export const {
   useGetWalletsQuery,
   useCreateWalletTransactionMutation,
   useGetStoresQuery,
+  useCreateStoreMutation,
+  useUpdateStoreMutation,
   useGetSessionsQuery,
   useGetOrdersQuery,
   useOpenSessionMutation,
@@ -963,6 +1092,8 @@ export const {
   useQuoteOrderMutation,
   useCompleteOrderMutation,
   useLoginMutation,
+  useVerifyEmailMutation,
+  useResendVerificationCodeMutation,
   // Admin
   useGetTenantProfileQuery,
   useUpdateTenantProfileMutation,
