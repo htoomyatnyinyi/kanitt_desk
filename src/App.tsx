@@ -116,9 +116,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<
-    "cash" | "kpay" | "wave" | "card"
-  >("cash");
+  const [paymentMethod] = useState<"cash" | "kpay" | "wave" | "card">("cash"); // remove setPayment Methods
   const [receivedAmount, setReceivedAmount] = useState("");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [orderPricing, setOrderPricing] = useState<any>(null);
@@ -675,7 +673,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   };
 
   return (
-    <div className="flex h-screen h-dvh min-h-0 w-full min-w-0 bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
+    <div className="flex h-screen min-h-0 w-full min-w-0 bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -911,7 +909,11 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               stock: variant.stock ?? 0,
               variants: [variant],
               inventories: product.inventories?.filter(
-                (inventory: any) => inventory.variantId === (product.baseUnitName && product.baseUnitVariantId ? product.baseUnitVariantId : variant.id),
+                (inventory: any) =>
+                  inventory.variantId ===
+                  (product.baseUnitName && product.baseUnitVariantId
+                    ? product.baseUnitVariantId
+                    : variant.id),
               ),
             })),
           )}
@@ -953,8 +955,6 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         paymentModalOpen={paymentModalOpen}
         setPaymentModalOpen={setPaymentModalOpen}
         total={total}
-        paymentMethod={paymentMethod}
-        setPaymentMethod={setPaymentMethod}
         receivedAmount={receivedAmount}
         setReceivedAmount={setReceivedAmount}
         changeAmount={changeAmount}

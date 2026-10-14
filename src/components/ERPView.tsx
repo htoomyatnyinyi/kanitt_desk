@@ -320,7 +320,7 @@ export function ERPView(props: Props) {
   /* -------------------------- derived data ------------------------ */
 
   const selectedOrder = orders.find((order) => order.id === fields.orderId);
-  const quantity = Math.max(0, Math.floor(Number(fields.quantity) || 0));
+  // const _quantity = Math.max(0, Math.floor(Number(fields.quantity) || 0));
   const isReturnable = (order: ApiOrder) =>
     order.status === "COMPLETED" || order.paymentStatus === "PAID";
 

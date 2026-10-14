@@ -28,7 +28,7 @@ import {
 import QRCode from "qrcode";
 import { Product } from "../types";
 import { apiService, resolveMediaUrl } from "../services/api";
-import { SearchableProductPicker } from "./SearchableProductPicker";
+// import { SearchableProductPicker } from "./SearchableProductPicker";
 import { ChoiceCards } from "./ChoiceCards";
 
 type Section =
