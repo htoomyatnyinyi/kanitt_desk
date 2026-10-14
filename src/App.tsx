@@ -9,6 +9,7 @@ import {
   useCreateOrderMutation,
   useQuoteOrderMutation,
   useCompleteOrderMutation,
+  useCreateDigitalReceiptLinkMutation,
   useGetOrdersQuery,
   useGetStoreSettingsQuery,
   useGetCategoriesQuery,
@@ -220,6 +221,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
   const [completeOrderApi, { isLoading: isCompletingOrder }] =
     useCompleteOrderMutation();
+  const [createDigitalReceiptLinkApi] = useCreateDigitalReceiptLinkMutation();
 
   // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
   useEffect(() => {
@@ -520,6 +522,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const handleCheckoutSuccess = async (
     payments?: { method: string; amount: number }[],
   ) => {
+    let completedOrderId: string | undefined;
+    let digitalReceipt: { url: string; expiresAt: string } | undefined;
     if (!orderPricing || pricingError) {
       setCheckoutError(
         pricingError ||
@@ -625,6 +629,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           return;
         }
         const order = result?.order ?? result?.data?.order ?? result;
+        completedOrderId = order?.id;
+        digitalReceipt = result?.digitalReceipt ?? result?.data?.digitalReceipt;
         if (order?.id && order.status === "PENDING")
           await completeOrderApi(order.id).unwrap();
       } catch (e) {
@@ -646,6 +652,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     }
     const completedReceiptData: ReceiptData = {
       orderNumber: checkoutOrderNumber,
+      orderId: completedOrderId,
+      digitalReceiptUrl: digitalReceipt?.url,
+      digitalReceiptExpiresAt: digitalReceipt?.expiresAt,
       createdAt: new Date().toISOString(),
       storeName: selectedStore?.name,
       storeId: selectedStore?.id,
@@ -1061,6 +1070,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       <ReceiptModal
         receipt={currentReceipt}
         onClose={() => setCurrentReceipt(null)}
+        onRefreshDigitalReceipt={async (orderId) => {
+          const response: any = await createDigitalReceiptLinkApi(orderId).unwrap();
+          return response?.digitalReceipt ?? response?.data?.digitalReceipt ?? null;
+        }}
       />
     </div>
   );

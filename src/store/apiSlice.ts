@@ -900,6 +900,9 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Orders", "Products", "Sessions"],
     }),
+    createDigitalReceiptLink: builder.mutation<any, string>({
+      query: (orderId) => ({ url: `/tenant/orders/${orderId}/digital-receipt` }),
+    }),
 
     // Auth
     login: builder.mutation<
@@ -1128,6 +1131,7 @@ export const {
   useCreateOrderMutation,
   useQuoteOrderMutation,
   useCompleteOrderMutation,
+  useCreateDigitalReceiptLinkMutation,
   useLoginMutation,
   useVerifyEmailMutation,
   useResendVerificationCodeMutation,

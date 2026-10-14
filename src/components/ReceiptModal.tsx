@@ -1,9 +1,13 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Printer, X, Check } from "lucide-react";
+import { Printer, X, Check, RefreshCw, QrCode } from "lucide-react";
+import QRCode from "qrcode";
 import { printIsolatedHtml, printToDefaultPrinter } from "../services/print";
 
 export interface ReceiptData {
   orderNumber: string;
+  orderId?: string;
+  digitalReceiptUrl?: string;
+  digitalReceiptExpiresAt?: string;
   createdAt: string;
   storeName?: string;
   storeAddress?: string;
@@ -32,6 +36,7 @@ export interface ReceiptData {
 interface ReceiptModalProps {
   receipt: ReceiptData | null;
   onClose: () => void;
+  onRefreshDigitalReceipt?: (orderId: string) => Promise<{ url: string; expiresAt: string } | null>;
 }
 
 /* Print a dedicated iframe document so the POS shell can never appear on paper. */
@@ -101,6 +106,7 @@ function formatReceiptText(receipt: ReceiptData, format: PrintFormat, paperWidth
       : [pair("Payment", receipt.paymentMethod)]),
     ...(receipt.receivedAmount !== undefined ? [pair("Received", `${receipt.receivedAmount.toLocaleString()} MMK`)] : []),
     ...(receipt.changeAmount !== undefined ? [pair("Change", `${receipt.changeAmount.toLocaleString()} MMK`)] : []),
+    ...(receipt.digitalReceiptUrl ? [separator, "Digital receipt", ...wrapPrintText(receipt.digitalReceiptUrl, columns)] : []),
     separator,
     ...wrapPrintText(receipt.receiptFooter || "Thank you for shopping with us!", columns).map(center),
     "",
@@ -139,10 +145,16 @@ async function printReceiptElement(sourceEl: HTMLElement, receipt: ReceiptData, 
   `);
 }
 
-export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: ReceiptModalProps) {
   const autoPrintedReceipt = useRef<string | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [previewFormat, setPreviewFormat] = useState<PrintFormat>("receipt");
+  const [digitalUrl, setDigitalUrl] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [refreshingQr, setRefreshingQr] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [qrError, setQrError] = useState("");
 
   const printerProfile = receipt?.storeId
     ? localStorage.getItem("kanitt:printer-profile:" + receipt.storeId)
@@ -170,6 +182,40 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
   }, [receipt?.orderNumber, defaultFormat]);
 
   useEffect(() => {
+    setDigitalUrl(receipt?.digitalReceiptUrl || "");
+    setExpiresAt(receipt?.digitalReceiptExpiresAt || "");
+    setQrError("");
+  }, [receipt?.orderNumber, receipt?.digitalReceiptUrl, receipt?.digitalReceiptExpiresAt]);
+
+  useEffect(() => {
+    let active = true;
+    if (!digitalUrl) { setQrDataUrl(""); return; }
+    void QRCode.toDataURL(digitalUrl, { width: 240, margin: 1, errorCorrectionLevel: "M" })
+      .then((dataUrl) => { if (active) setQrDataUrl(dataUrl); })
+      .catch(() => { if (active) setQrDataUrl(""); });
+    return () => { active = false; };
+  }, [digitalUrl]);
+
+  useEffect(() => {
+    const update = () => setRemainingSeconds(expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0);
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt]);
+
+  const refreshDigitalReceipt = async () => {
+    if (!receipt?.orderId || !onRefreshDigitalReceipt) return;
+    setRefreshingQr(true);
+    try {
+      const fresh = await onRefreshDigitalReceipt(receipt.orderId);
+      if (fresh) { setDigitalUrl(fresh.url); setExpiresAt(fresh.expiresAt); }
+      else setQrError("Could not create the receipt QR. Check your connection and try again.");
+    } catch {
+      setQrError("Could not create the receipt QR. Check your connection and try again.");
+    } finally { setRefreshingQr(false); }
+  };
+
+  useEffect(() => {
     if (
       !receipt ||
       !receipt.allowAutoPrint ||
@@ -187,7 +233,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+      <div className="flex flex-col max-h-[92vh] w-full max-w-md overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2 text-emerald-400">
@@ -226,6 +272,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
             {receipt.storePhone && (
               <p className="text-[10px] text-slate-500">{receipt.storePhone}</p>
             )}
+            {qrDataUrl && <div className="mt-3 border-t border-dashed border-slate-300 pt-3"><img src={qrDataUrl} alt="Scan for digital receipt" className="mx-auto h-28 w-28"/><p className="text-[9px] font-semibold text-slate-600">Scan to view digital receipt</p></div>}
             <p className="text-[10px] text-slate-500">
               Receipt #{receipt.orderNumber}
             </p>
@@ -333,6 +380,20 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
             </p>
           </div>
         </div>
+
+        {receipt.orderId && (
+          <section className="mb-3 flex items-center gap-3 rounded-2xl border border-sky-400/20 bg-sky-400/5 p-3">
+            {qrDataUrl ? <img src={qrDataUrl} alt="Digital receipt QR code" className="h-24 w-24 rounded-lg bg-white p-1" /> : <QrCode className="h-12 w-12 shrink-0 text-sky-300" />}
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-white">Digital receipt</p>
+              <p className="mt-1 text-xs text-slate-400">Customer can scan this QR to open the receipt and save it as PDF.</p>
+              {remainingSeconds > 0 ? <p className="mt-1 text-xs text-amber-300">QR expires in {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}</p> : <p className="mt-1 text-xs text-rose-300">{digitalUrl ? "QR expired. Show a fresh code." : "Create a QR code for this receipt."}</p>}
+              {qrError && <p className="mt-1 text-xs text-rose-300">{qrError}</p>}
+              {remainingSeconds === 0 && <button onClick={() => void refreshDigitalReceipt()} disabled={refreshingQr || !onRefreshDigitalReceipt} className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshingQr ? "animate-spin" : ""}`} />{refreshingQr ? "Refreshing…" : "Show QR again"}</button>}
+              {digitalUrl && <button onClick={() => void navigator.clipboard?.writeText(digitalUrl)} className="ml-2 mt-2 text-xs font-semibold text-sky-300">Copy link</button>}
+            </div>
+          </section>
+        )}
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 pt-2">
