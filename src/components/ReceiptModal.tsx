@@ -61,28 +61,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm print:p-0 print:bg-white print:static">
-      <style>{`
-        @page { size: auto; margin: 2mm; }
-        @media print {
-          body > * { visibility: hidden !important; }
-          #kanitt-receipt-print,
-          #kanitt-receipt-print * { visibility: visible !important; }
-          #kanitt-receipt-print {
-            position: fixed !important;
-            left: 0; top: 0;
-            width: 100% !important;
-            max-width: none !important;
-            max-height: none !important;
-            overflow: visible !important;
-            border: none !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            background: white !important;
-          }
-        }
-      `}</style>
+      <style>{`@page { size: auto; margin: 2mm; } @media print { body * { visibility: hidden !important; } #kanitt-receipt-print, #kanitt-receipt-print * { visibility: visible !important; } #kanitt-receipt-print { display: block !important; position: fixed; left: 0; top: 0; width: ${paperWidth}mm; padding: 4mm; color: #000; background: #fff; font: 12px monospace; z-index: 99999; } }`}</style>
       <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl print:border-0 print:bg-white print:p-0 print:shadow-none print:max-w-none print:w-full">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800 print:hidden">
