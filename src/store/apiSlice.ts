@@ -30,6 +30,7 @@ export interface Product {
   inventories?: {
     quantity: number;
     lot?: {
+      id?: string;
       number: string;
       expiryDate?: string | null;
       manufacturingDate?: string | null;
@@ -61,6 +62,7 @@ export interface Store {
 
 export interface Session {
   id: string;
+  userId?: string;
   storeId: string;
   cashierName?: string;
   openedAt: string;
@@ -133,6 +135,17 @@ export const kanittApi = createApi({
   reducerPath: "kanittApi",
   baseQuery: fetchBaseQuery({
     baseUrl: API_BASE_URL,
+    // Keep non-JSON proxy/server errors readable instead of replacing them
+    // with RTK Query's unhelpful "PARSING_ERROR" message.
+    responseHandler: async (response) => {
+      const text = await response.text();
+      if (!text) return null;
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    },
     prepareHeaders: (headers) => {
       const token = localStorage.getItem("kanitt_token");
       if (token) {
@@ -447,6 +460,8 @@ export const kanittApi = createApi({
         storeId: string;
         productId: string;
         variantId?: string;
+        lotId?: string;
+        quantityIsBaseUnit?: boolean;
         quantity: number;
         reason: string;
         movementType?: "ADJUSTMENT" | "DAMAGE" | "EXPIRED";
@@ -456,6 +471,8 @@ export const kanittApi = createApi({
         storeId,
         productId,
         variantId,
+        lotId,
+        quantityIsBaseUnit,
         quantity,
         reason,
         movementType,
@@ -466,6 +483,8 @@ export const kanittApi = createApi({
           storeId,
           productId,
           variantId,
+          lotId,
+          quantityIsBaseUnit,
           quantity,
           type: movementType || "ADJUSTMENT",
           referenceId: `DESKTOP-${crypto.randomUUID()}`,
@@ -474,6 +493,23 @@ export const kanittApi = createApi({
         },
       }),
       invalidatesTags: ["Products", "Inventory"],
+    }),
+    getInventoryMovements: builder.query<any[], { storeId?: string }>({
+      query: ({ storeId }) => ({
+        url: "/tenant/inventory/movements",
+        params: { page: 1, limit: 10000, ...(storeId ? { storeId } : {}) },
+      }),
+      transformResponse: (response: any) =>
+        unwrapList(response, "movements").map((movement: any) => ({
+          ...movement,
+          productName: movement.productName ?? movement.product?.name ?? "Product",
+          sku: movement.sku ?? movement.variant?.sku ?? movement.product?.sku,
+          userName: movement.userName ?? movement.user?.name,
+          reference: movement.reference ?? movement.referenceId,
+          lotNumber: movement.lotNumber ?? movement.lot?.number,
+          expiryDate: movement.expiryDate ?? movement.lot?.expiryDate,
+        })),
+      providesTags: ["Inventory"],
     }),
     getPurchaseOrders: builder.query<any[], { storeId?: string }>({
       query: ({ storeId } = {}) => ({
@@ -585,7 +621,7 @@ export const kanittApi = createApi({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["StockTransfers", "StockRequests", "Notifications"],
+      invalidatesTags: ["StockTransfers", "StockRequests", "Notifications", "Products", "Inventory"],
     }),
     completeStockTransfer: builder.mutation<any, string>({
       query: (id) => ({
@@ -864,6 +900,9 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Orders", "Products", "Sessions"],
     }),
+    createDigitalReceiptLink: builder.mutation<any, string>({
+      query: (orderId) => ({ url: `/tenant/orders/${orderId}/digital-receipt` }),
+    }),
 
     // Auth
     login: builder.mutation<
@@ -1050,6 +1089,7 @@ export const {
   useCreateStaffMutation,
   useUpdateStaffMutation,
   useAdjustStockMutation,
+  useGetInventoryMovementsQuery,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,
@@ -1091,6 +1131,7 @@ export const {
   useCreateOrderMutation,
   useQuoteOrderMutation,
   useCompleteOrderMutation,
+  useCreateDigitalReceiptLinkMutation,
   useLoginMutation,
   useVerifyEmailMutation,
   useResendVerificationCodeMutation,

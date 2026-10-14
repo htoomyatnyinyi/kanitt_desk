@@ -1,13 +1,27 @@
 import { useEffect, useState } from "react";
 import { Printer, Server, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import {
+  escapeHtml,
+  listSystemPrinters,
+  printIsolatedHtml,
+  printToDefaultPrinter,
+  SystemPrinter,
+} from "../services/print";
+import {
   useGetStoreSettingsQuery,
   useUpsertStoreSettingMutation,
 } from "../store/apiSlice";
 
-type PrinterProfile = { paperWidth: "58" | "80"; autoPrintReceipt: boolean };
+type PrinterProfile = {
+  paperWidth: "58" | "80";
+  defaultFormat: "receipt" | "a4";
+  printerName: string;
+  autoPrintReceipt: boolean;
+};
 const defaultProfile: PrinterProfile = {
   paperWidth: "80",
+  defaultFormat: "receipt",
+  printerName: "",
   autoPrintReceipt: false,
 };
 const profileKey = (storeId?: string) =>
@@ -18,40 +32,90 @@ export function SettingsView({
   storeName,
   storeId,
   canEditStoreSettings,
+  canEditRegisterSessionMode,
 }: {
   connected: boolean;
   storeName?: string;
   storeId?: string;
   canEditStoreSettings: boolean;
+  canEditRegisterSessionMode: boolean;
 }) {
   // const configuredApi = import.meta.env.VITE_API_URL || "http://localhost:6060";
   const configuredApi =
     import.meta.env.VITE_API_URL || "https://dev.oasislab.de5.net";
   const [profile, setProfile] = useState<PrinterProfile>(defaultProfile);
-  const [testPrint, setTestPrint] = useState(false);
+  const [systemPrinters, setSystemPrinters] = useState<SystemPrinter[]>([]);
   const [receiptHeader, setReceiptHeader] = useState(storeName || "");
   const [receiptFooter, setReceiptFooter] = useState(
     "Thank you for shopping with us!",
   );
   const [storeSaveMessage, setStoreSaveMessage] = useState("");
+  const [sessionModeMessage, setSessionModeMessage] = useState("");
   const { data: storeSettings = [] } = useGetStoreSettingsQuery(
     { storeId },
     { skip: !storeId },
   );
   const [upsertStoreSetting, { isLoading: savingStoreSettings }] =
     useUpsertStoreSettingMutation();
+  const registerSessionMode = String(
+    storeSettings.find((item: any) => item.settingKey === "register_session_mode")?.settingValue ?? "SHARED",
+  ).toUpperCase() === "INDIVIDUAL" ? "INDIVIDUAL" : "SHARED";
+
+  const saveRegisterSessionMode = async (mode: "SHARED" | "INDIVIDUAL") => {
+    if (!storeId || !canEditRegisterSessionMode) return;
+    setSessionModeMessage("");
+    try {
+      await upsertStoreSetting({
+        storeId,
+        settingKey: "register_session_mode",
+        settingValue: mode,
+        description: "Controls whether a register session is shared by the store or belongs to one staff member.",
+      }).unwrap();
+      setSessionModeMessage(mode === "SHARED"
+        ? "Shared register mode saved. Cashiers can use the store's open session."
+        : "Individual shift mode saved. Each staff member opens and closes their own session.");
+    } catch (error: any) {
+      setSessionModeMessage(error?.data?.message || error?.message || "Could not save register session mode.");
+    }
+  };
 
   useEffect(() => {
+    let active = true;
     try {
       const saved = localStorage.getItem(profileKey(storeId));
       const parsed = saved ? JSON.parse(saved) : {};
-      setProfile({
+      void listSystemPrinters().then((printers) => {
+        if (!active) return;
+        setSystemPrinters(printers);
+        const hasSavedPrinterChoice = typeof parsed.printerName === "string";
+        const printerName = hasSavedPrinterChoice
+          ? parsed.printerName
+          : printers.find((printer) => printer.isDefault)?.name || "";
+        const nextProfile = {
         paperWidth: parsed.paperWidth === "58" ? "58" : "80",
+        defaultFormat: parsed.defaultFormat === "a4" ? "a4" : "receipt",
+        printerName,
         autoPrintReceipt: parsed.autoPrintReceipt === true,
+        } as PrinterProfile;
+        setProfile(nextProfile);
+        if (!hasSavedPrinterChoice && printerName) {
+          localStorage.setItem(profileKey(storeId), JSON.stringify(nextProfile));
+        }
+      }).catch(() => {
+        if (active) {
+          setSystemPrinters([]);
+          setProfile({
+            paperWidth: parsed.paperWidth === "58" ? "58" : "80",
+            defaultFormat: parsed.defaultFormat === "a4" ? "a4" : "receipt",
+            printerName: parsed.printerName || "",
+            autoPrintReceipt: parsed.autoPrintReceipt === true,
+          });
+        }
       });
     } catch {
       setProfile(defaultProfile);
     }
+    return () => { active = false; };
   }, [storeId]);
 
   useEffect(() => {
@@ -71,21 +135,24 @@ export function SettingsView({
     );
   }, [storeSettings, storeName]);
 
-  useEffect(() => {
-    if (!testPrint) return;
-    const handleAfterPrint = () => setTestPrint(false);
-    window.addEventListener("afterprint", handleAfterPrint);
-    return () => window.removeEventListener("afterprint", handleAfterPrint);
-  }, [testPrint]);
-
   const saveProfile = (next: PrinterProfile) => {
     setProfile(next);
     localStorage.setItem(profileKey(storeId), JSON.stringify(next));
   };
 
-  const runTestPrint = () => {
-    setTestPrint(true);
-    window.setTimeout(() => window.print(), 150);
+  const runTestPrint = async () => {
+    const store = escapeHtml(storeName || "KANITT POS");
+    const width = profile.paperWidth;
+    const testContent = `PRINTER TEST\n${store}\nPaper width: ${width} mm\n${new Date().toLocaleString()}\n`;
+    try {
+      if (await printToDefaultPrinter(testContent, profile.printerName)) return;
+    } catch {
+      // Fall through to the isolated OS dialog when the default printer is unavailable.
+    }
+    printIsolatedHtml(
+      `<main id="kanitt-printer-test"><h2>${store}</h2><p>PRINTER TEST</p><hr><p>Paper width: ${width} mm</p><p>${escapeHtml(new Date().toLocaleString())}</p><p>Printer is selected in the system print dialog.</p></main>`,
+      `@page { size: ${width}mm auto; margin: 0; } html, body { margin: 0; padding: 0; } #kanitt-printer-test { box-sizing: border-box; width: ${width}mm; padding: 4mm; color: #000; background: #fff; font: 12px monospace; }`,
+    );
   };
 
   const saveStoreReceiptSettings = async () => {
@@ -115,23 +182,6 @@ export function SettingsView({
 
   return (
     <main className="relative flex-1 overflow-y-auto p-6">
-      {testPrint && (
-        <>
-          <style>
-            {"@page { size: auto; margin: 2mm; } @media print { body * { visibility: hidden !important; } #kanitt-printer-test, #kanitt-printer-test * { visibility: visible !important; } #kanitt-printer-test { display: block !important; position: fixed; left: 0; top: 0; width: " +
-              profile.paperWidth +
-              "mm; padding: 4mm; color: #000; background: #fff; font: 12px monospace; } }"}
-          </style>
-          <div id="kanitt-printer-test" className="hidden print:block">
-            <h2>{storeName || "KANITT POS"}</h2>
-            <p>PRINTER TEST</p>
-            <hr />
-            <p>Paper width: {profile.paperWidth} mm</p>
-            <p>{new Date().toLocaleString()}</p>
-            <p>Printer connection is handled by the system print dialog.</p>
-          </div>
-        </>
-      )}
       <div className="mb-6">
         <h2 className="text-2xl font-black text-white">
           Register &amp; Printer Settings
@@ -142,6 +192,30 @@ export function SettingsView({
       </div>
 
       <div className="grid max-w-4xl grid-cols-1 gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 md:col-span-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Register session policy</h3>
+          <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">Choose how this store tracks cash drawer shifts. In shared mode one open register session serves every cashier; only its opener or an administrator can close it. In individual mode each staff member has a separate session.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {([
+              ["SHARED", "Shared store register", "Recommended for a common till. Any cashier can check out against the active store session."],
+              ["INDIVIDUAL", "Individual staff shifts", "Each cashier must open their own shift and can close only their own session."],
+            ] as const).map(([mode, title, description]) => (
+              <button
+                key={mode}
+                type="button"
+                disabled={!canEditRegisterSessionMode || savingStoreSettings}
+                onClick={() => void saveRegisterSessionMode(mode)}
+                aria-pressed={registerSessionMode === mode}
+                className={`rounded-xl border p-4 text-left transition ${registerSessionMode === mode ? "border-sky-400/60 bg-sky-400/10" : "border-slate-700 bg-slate-950/50 hover:border-slate-600"} disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <span className="flex items-center justify-between text-sm font-bold text-white">{title}<span className={`h-3 w-3 rounded-full border ${registerSessionMode === mode ? "border-sky-300 bg-sky-300" : "border-slate-600"}`} /></span>
+                <span className="mt-2 block text-xs leading-5 text-slate-400">{description}</span>
+              </button>
+            ))}
+          </div>
+          {sessionModeMessage && <p role="status" className="mt-3 text-xs text-slate-300">{sessionModeMessage}</p>}
+          {!canEditRegisterSessionMode && <p className="mt-3 text-[10px] text-slate-500">Only an administrator can change this store-wide policy.</p>}
+        </section>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
           <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
             Active Workspace
@@ -214,9 +288,49 @@ export function SettingsView({
             This Register Printer
           </h3>
           <p className="mb-4 text-xs leading-5 text-slate-500">
-            Tauri uses the operating system printer dialog. Select the printer
-            there, then save its paper layout below.
+            Choose a printer and format once for this register. Tauri sends
+            receipts directly to that printer; set its 58/80 mm or A4 paper
+            size in the printer driver.
           </p>
+          <label className="mb-4 block text-xs font-semibold text-slate-300">
+            Printer for this register
+            <select
+              value={profile.printerName}
+              onChange={(event) => saveProfile({ ...profile, printerName: event.target.value })}
+              className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+            >
+              <option value="">Use OS default printer</option>
+              {profile.printerName && !systemPrinters.some((printer) => printer.name === profile.printerName) && (
+                <option value={profile.printerName}>Unavailable: {profile.printerName}</option>
+              )}
+              {systemPrinters.map((printer) => (
+                <option key={printer.name} value={printer.name}>
+                  {printer.name}{printer.isDefault ? " (OS default)" : ""}
+                </option>
+              ))}
+            </select>
+            {systemPrinters.length === 0 && (
+              <span className="mt-1 block text-[10px] font-normal text-slate-500">
+                No printer queues found. Install a printer in OS settings first.
+              </span>
+            )}
+          </label>
+          <label className="mb-4 block text-xs font-semibold text-slate-300">
+            Default checkout print
+            <select
+              value={profile.defaultFormat}
+              onChange={(event) =>
+                saveProfile({
+                  ...profile,
+                  defaultFormat: event.target.value as "receipt" | "a4",
+                })
+              }
+              className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+            >
+              <option value="receipt">Thermal receipt ({profile.paperWidth} mm)</option>
+              <option value="a4">A4 page</option>
+            </select>
+          </label>
           <label className="block text-xs font-semibold text-slate-300">
             Receipt paper width
             <select
@@ -236,10 +350,10 @@ export function SettingsView({
           <label className="mt-4 flex cursor-pointer items-center justify-between rounded-xl bg-slate-950 p-3">
             <span>
               <span className="block text-xs font-semibold text-white">
-                Auto-print receipt after sale
+                Open print dialog automatically after checkout
               </span>
               <span className="mt-1 block text-[10px] text-slate-500">
-                Opens the system print dialog after checkout.
+                Send the selected format to this register's default printer after checkout.
               </span>
             </span>
             <input
@@ -262,9 +376,8 @@ export function SettingsView({
             Test print
           </button>
           <p className="mt-3 text-[10px] leading-4 text-slate-500">
-            Test print opens the OS print dialog so the cashier can choose an
-            installed printer. Direct Bluetooth/LAN selection is not available
-            in this Tauri build.
+            Test print goes to the selected register printer using its driver
+            paper size. Web mode falls back to the OS print dialog.
           </p>
         </div>
 

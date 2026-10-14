@@ -1,8 +1,13 @@
-import { useEffect, useRef, useCallback } from "react";
-import { Printer, X, Check } from "lucide-react";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { Printer, X, Check, RefreshCw, QrCode } from "lucide-react";
+import QRCode from "qrcode";
+import { printIsolatedHtml, printToDefaultPrinter } from "../services/print";
 
 export interface ReceiptData {
   orderNumber: string;
+  orderId?: string;
+  digitalReceiptUrl?: string;
+  digitalReceiptExpiresAt?: string;
   createdAt: string;
   storeName?: string;
   storeAddress?: string;
@@ -31,100 +36,204 @@ export interface ReceiptData {
 interface ReceiptModalProps {
   receipt: ReceiptData | null;
   onClose: () => void;
+  onRefreshDigitalReceipt?: (orderId: string) => Promise<{ url: string; expiresAt: string } | null>;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Print helper — clones receipt HTML into a top-level container,     */
-/*  prints it, then removes it. Works reliably in Tauri / all webviews */
-/* ------------------------------------------------------------------ */
-const PRINT_CONTAINER_ID = "kanitt-receipt-print-container";
+/* Print a dedicated iframe document so the POS shell can never appear on paper. */
 
-function printReceiptElement(sourceEl: HTMLElement, paperWidth: string) {
-  // Remove any leftover container from a previous print
-  document.getElementById(PRINT_CONTAINER_ID)?.remove();
+type PrintFormat = "receipt" | "a4";
 
-  // Create a fresh container directly on <body>
-  const container = document.createElement("div");
-  container.id = PRINT_CONTAINER_ID;
-  container.innerHTML = sourceEl.innerHTML;
+function cleanPrintText(value: string) {
+  return String(value || "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+}
 
-  // Inject a self-contained print stylesheet
-  const style = document.createElement("style");
-  style.textContent = `
-    @media print {
-      body > *:not(#${PRINT_CONTAINER_ID}) { display: none !important; }
-      #${PRINT_CONTAINER_ID} {
-        display: block !important;
-        position: static !important;
-        width: ${paperWidth}mm !important;
-        padding: 2mm !important;
+function wrapPrintText(value: string, width: number) {
+  const words = cleanPrintText(value).split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const chunks = word.length > width
+      ? word.match(new RegExp(`.{1,${width}}`, "gu")) || [word]
+      : [word];
+    for (const chunk of chunks) {
+      if (line && line.length + chunk.length + 1 > width) {
+        lines.push(line);
+        line = chunk;
+      } else {
+        line = line ? `${line} ${chunk}` : chunk;
+      }
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function formatReceiptText(receipt: ReceiptData, format: PrintFormat, paperWidth: string) {
+  const columns = format === "a4" ? 90 : paperWidth === "58" ? 32 : 48;
+  const separator = "-".repeat(columns);
+  const center = (value: string) => {
+    const text = cleanPrintText(value);
+    return text.length >= columns ? text : " ".repeat(Math.floor((columns - text.length) / 2)) + text;
+  };
+  const pair = (label: string, value: string) => {
+    const left = cleanPrintText(label);
+    const right = cleanPrintText(value);
+    return left.length + right.length + 1 <= columns
+      ? `${left}${" ".repeat(columns - left.length - right.length)}${right}`
+      : `${left}\n${right.padStart(columns)}`;
+  };
+  const lines = [
+    center(receipt.receiptHeader || receipt.storeName || "KANITT RETAIL"),
+    ...(receipt.storeName && receipt.storeName !== receipt.receiptHeader ? wrapPrintText(receipt.storeName, columns).map(center) : []),
+    ...wrapPrintText(receipt.storeAddress || "", columns).map(center),
+    receipt.storePhone ? center(receipt.storePhone) : "",
+    separator,
+    pair("Receipt", receipt.orderNumber),
+    pair("Date", new Date(receipt.createdAt).toLocaleString()),
+    pair("Cashier", receipt.cashierName || "Staff"),
+    separator,
+    ...receipt.items.flatMap((item) => [
+      ...wrapPrintText(item.name, columns),
+      pair(`${item.quantity} x ${item.unitPrice.toLocaleString()}`, `${item.subTotal.toLocaleString()} MMK`),
+    ]),
+    separator,
+    pair("Subtotal", `${receipt.subTotal.toLocaleString()} MMK`),
+    ...(receipt.discountAmount > 0 ? [pair("Discount", `-${receipt.discountAmount.toLocaleString()} MMK`)] : []),
+    ...(receipt.taxAmount > 0 ? [pair("Tax", `${receipt.taxAmount.toLocaleString()} MMK`)] : []),
+    pair("TOTAL", `${receipt.grandTotal.toLocaleString()} MMK`),
+    ...(receipt.payments?.length
+      ? receipt.payments.map((payment) => pair(payment.method.replace(/_/g, " "), `${payment.amount.toLocaleString()} MMK`))
+      : [pair("Payment", receipt.paymentMethod)]),
+    ...(receipt.receivedAmount !== undefined ? [pair("Received", `${receipt.receivedAmount.toLocaleString()} MMK`)] : []),
+    ...(receipt.changeAmount !== undefined ? [pair("Change", `${receipt.changeAmount.toLocaleString()} MMK`)] : []),
+    ...(receipt.digitalReceiptUrl ? [separator, "Digital receipt", ...wrapPrintText(receipt.digitalReceiptUrl, columns)] : []),
+    separator,
+    ...wrapPrintText(receipt.receiptFooter || "Thank you for shopping with us!", columns).map(center),
+    "",
+  ];
+  return lines.filter((line, index) => line || (index > 0 && lines[index - 1] !== "")).join("\n");
+}
+
+async function printReceiptElement(sourceEl: HTMLElement, receipt: ReceiptData, paperWidth: string, format: PrintFormat, printerName?: string) {
+  try {
+    if (await printToDefaultPrinter(formatReceiptText(receipt, format, paperWidth), printerName)) return;
+  } catch {
+    // If the native spooler is unavailable, fall back to the OS print dialog.
+  }
+  const pageSize = format === "a4" ? "A4 portrait" : `${paperWidth}mm auto`;
+  const contentWidth = format === "a4" ? "190mm" : `${paperWidth}mm`;
+  printIsolatedHtml(`<main id="kanitt-print-root">${sourceEl.innerHTML}</main>`, `
+    @page { size: ${pageSize}; margin: ${format === "a4" ? "10mm" : "0"}; }
+    html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+    #kanitt-print-root {
+        box-sizing: border-box !important;
+        width: ${contentWidth} !important;
+        max-width: ${contentWidth} !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: ${format === "a4" ? "8mm" : "2mm"} !important;
         margin: 0 !important;
         background: #fff !important;
         color: #000 !important;
         font-family: monospace !important;
-        font-size: 12px !important;
+        font-size: ${format === "a4" ? "10pt" : "12px"} !important;
         line-height: 1.4 !important;
-        visibility: visible !important;
-      }
-      #${PRINT_CONTAINER_ID} * {
-        visibility: visible !important;
-        color: inherit !important;
-      }
-      #${PRINT_CONTAINER_ID} h2 { font-size: 16px !important; font-weight: 900 !important; }
     }
-    @media screen {
-      #${PRINT_CONTAINER_ID} { display: none !important; }
-    }
-    @page { size: auto; margin: 2mm; }
-  `;
-
-  container.prepend(style);
-  document.body.appendChild(container);
-
-  // Print, then clean up
-  window.setTimeout(() => {
-    window.print();
-    // Remove after printing (give browser time to finish)
-    window.setTimeout(() => {
-      document.getElementById(PRINT_CONTAINER_ID)?.remove();
-    }, 500);
-  }, 100);
+    #kanitt-print-root * { color: #000 !important; visibility: visible !important; }
+    #kanitt-print-root h2 { font-size: ${format === "a4" ? "22pt" : "16px"} !important; font-weight: 900 !important; }
+  `);
 }
 
-export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: ReceiptModalProps) {
   const autoPrintedReceipt = useRef<string | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [previewFormat, setPreviewFormat] = useState<PrintFormat>("receipt");
+  const [digitalUrl, setDigitalUrl] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [refreshingQr, setRefreshingQr] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [qrError, setQrError] = useState("");
 
   const printerProfile = receipt?.storeId
     ? localStorage.getItem("kanitt:printer-profile:" + receipt.storeId)
     : null;
   let paperWidth: "58" | "80" = "80";
+  let defaultFormat: PrintFormat = "receipt";
+  let printerName = "";
   let autoPrintReceipt = false;
   try {
     const preferences = printerProfile ? JSON.parse(printerProfile) : {};
     paperWidth = preferences.paperWidth === "58" ? "58" : "80";
+    defaultFormat = preferences.defaultFormat === "a4" ? "a4" : "receipt";
+    printerName = typeof preferences.printerName === "string" ? preferences.printerName : "";
     autoPrintReceipt = preferences.autoPrintReceipt === true;
   } catch {}
 
-  const handlePrint = useCallback(() => {
-    if (receiptRef.current) {
-      printReceiptElement(receiptRef.current, paperWidth);
+  const handlePrint = useCallback((format: PrintFormat = defaultFormat) => {
+    if (receiptRef.current && receipt) {
+      void printReceiptElement(receiptRef.current, receipt, paperWidth, format, printerName);
     }
-  }, [paperWidth]);
+  }, [receipt, paperWidth, defaultFormat, printerName]);
 
   useEffect(() => {
-    if (!receipt || !receipt.allowAutoPrint || !autoPrintReceipt || autoPrintedReceipt.current === receipt.orderNumber) return;
+    setPreviewFormat(defaultFormat);
+  }, [receipt?.orderNumber, defaultFormat]);
+
+  useEffect(() => {
+    setDigitalUrl(receipt?.digitalReceiptUrl || "");
+    setExpiresAt(receipt?.digitalReceiptExpiresAt || "");
+    setQrError("");
+  }, [receipt?.orderNumber, receipt?.digitalReceiptUrl, receipt?.digitalReceiptExpiresAt]);
+
+  useEffect(() => {
+    let active = true;
+    if (!digitalUrl) { setQrDataUrl(""); return; }
+    void QRCode.toDataURL(digitalUrl, { width: 240, margin: 1, errorCorrectionLevel: "M" })
+      .then((dataUrl) => { if (active) setQrDataUrl(dataUrl); })
+      .catch(() => { if (active) setQrDataUrl(""); });
+    return () => { active = false; };
+  }, [digitalUrl]);
+
+  useEffect(() => {
+    const update = () => setRemainingSeconds(expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0);
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt]);
+
+  const refreshDigitalReceipt = async () => {
+    if (!receipt?.orderId || !onRefreshDigitalReceipt) return;
+    setRefreshingQr(true);
+    try {
+      const fresh = await onRefreshDigitalReceipt(receipt.orderId);
+      if (fresh) { setDigitalUrl(fresh.url); setExpiresAt(fresh.expiresAt); }
+      else setQrError("Could not create the receipt QR. Check your connection and try again.");
+    } catch {
+      setQrError("Could not create the receipt QR. Check your connection and try again.");
+    } finally { setRefreshingQr(false); }
+  };
+
+  useEffect(() => {
+    if (
+      !receipt ||
+      !receipt.allowAutoPrint ||
+      !autoPrintReceipt ||
+      autoPrintedReceipt.current === receipt.orderNumber
+    )
+      return;
     autoPrintedReceipt.current = receipt.orderNumber;
     // Delay to allow DOM to render
-    window.setTimeout(() => handlePrint(), 300);
-  }, [receipt?.orderNumber, autoPrintReceipt, handlePrint]);
+    window.setTimeout(() => handlePrint(defaultFormat), 300);
+  }, [receipt?.orderNumber, autoPrintReceipt, defaultFormat, handlePrint]);
 
   if (!receipt) return null;
   const receiptHeading = receipt.receiptHeader || "KANITT RETAIL";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div className="flex flex-col max-h-[90vh] w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+      <div className="flex flex-col max-h-[92vh] w-full max-w-md overflow-hidden rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-2xl">
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2 text-emerald-400">
@@ -140,32 +249,62 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
         </div>
 
         {/* Receipt Preview Area (also used as source for printing) */}
-        <div ref={receiptRef} className="my-4 flex-1 overflow-y-auto font-mono text-xs text-slate-900 bg-white p-5 rounded-2xl shadow-inner" style={{ width: paperWidth + "mm" }}>
+        <div
+          ref={receiptRef}
+          className="my-4 min-h-0 flex-1 overflow-y-auto self-center rounded-2xl bg-white p-5 font-mono text-xs text-slate-900 shadow-inner"
+          style={{ width: previewFormat === "a4" ? "100%" : paperWidth + "mm", maxWidth: "100%" }}
+        >
           {/* Header & Logo */}
           <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-400">
-            <h2 className="text-lg font-black uppercase tracking-wider text-black">{receiptHeading}</h2>
-            {receipt.storeName && receipt.storeName !== receiptHeading && <p className="text-[11px] font-semibold text-slate-700">{receipt.storeName}</p>}
-            {receipt.storeAddress && <p className="text-[10px] text-slate-500">{receipt.storeAddress}</p>}
-            {receipt.storePhone && <p className="text-[10px] text-slate-500">{receipt.storePhone}</p>}
-            <p className="text-[10px] text-slate-500">Receipt #{receipt.orderNumber}</p>
-            <p className="text-[10px] text-slate-500">{new Date(receipt.createdAt).toLocaleString()}</p>
+            <h2 className="text-lg font-black uppercase tracking-wider text-black">
+              {receiptHeading}
+            </h2>
+            {receipt.storeName && receipt.storeName !== receiptHeading && (
+              <p className="text-[11px] font-semibold text-slate-700">
+                {receipt.storeName}
+              </p>
+            )}
+            {receipt.storeAddress && (
+              <p className="text-[10px] text-slate-500">
+                {receipt.storeAddress}
+              </p>
+            )}
+            {receipt.storePhone && (
+              <p className="text-[10px] text-slate-500">{receipt.storePhone}</p>
+            )}
+            {qrDataUrl && <div className="mt-3 border-t border-dashed border-slate-300 pt-3"><img src={qrDataUrl} alt="Scan for digital receipt" className="mx-auto h-28 w-28"/><p className="text-[9px] font-semibold text-slate-600">Scan to view digital receipt</p></div>}
+            <p className="text-[10px] text-slate-500">
+              Receipt #{receipt.orderNumber}
+            </p>
+            <p className="text-[10px] text-slate-500">
+              {new Date(receipt.createdAt).toLocaleString()}
+            </p>
           </div>
 
           {/* Customer / Cashier Info */}
           <div className="py-2.5 border-b border-dashed border-slate-400 space-y-0.5 text-[10px] text-slate-700">
             <div className="flex justify-between">
               <span>Cashier:</span>
-              <span className="font-semibold">{receipt.cashierName || "Staff"}</span>
+              <span className="font-semibold">
+                {receipt.cashierName || "Staff"}
+              </span>
             </div>
             {receipt.payments?.map((payment, index) => (
-              <div key={payment.method + index} className="flex justify-between">
+              <div
+                key={payment.method + index}
+                className="flex justify-between"
+              >
                 <span>{payment.method.replace(/_/g, " ")}:</span>
-                <span className="font-semibold">{payment.amount.toLocaleString()} MMK</span>
+                <span className="font-semibold">
+                  {payment.amount.toLocaleString()} MMK
+                </span>
               </div>
             ))}
             <div className="flex justify-between">
               <span>Payment:</span>
-              <span className="font-semibold uppercase">{receipt.paymentMethod}</span>
+              <span className="font-semibold uppercase">
+                {receipt.paymentMethod}
+              </span>
             </div>
           </div>
 
@@ -180,8 +319,12 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
               <div key={idx} className="space-y-0.5">
                 <div className="font-bold text-black truncate">{item.name}</div>
                 <div className="flex justify-between text-[11px] text-slate-700">
-                  <span>{item.quantity} x {item.unitPrice.toLocaleString()}</span>
-                  <span className="font-semibold">{item.subTotal.toLocaleString()}</span>
+                  <span>
+                    {item.quantity} x {item.unitPrice.toLocaleString()}
+                  </span>
+                  <span className="font-semibold">
+                    {item.subTotal.toLocaleString()}
+                  </span>
                 </div>
               </div>
             ))}
@@ -209,45 +352,73 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
               <span>GRAND TOTAL:</span>
               <span>{receipt.grandTotal.toLocaleString()} MMK</span>
             </div>
-            {receipt.receivedAmount !== undefined && receipt.receivedAmount > 0 && (
-              <>
-                <div className="flex justify-between text-slate-700 pt-1">
-                  <span>Received:</span>
-                  <span>{receipt.receivedAmount.toLocaleString()} MMK</span>
-                </div>
-                <div className="flex justify-between text-slate-900 font-bold">
-                  <span>Change:</span>
-                  <span>{(receipt.changeAmount || 0).toLocaleString()} MMK</span>
-                </div>
-              </>
-            )}
+            {receipt.receivedAmount !== undefined &&
+              receipt.receivedAmount > 0 && (
+                <>
+                  <div className="flex justify-between text-slate-700 pt-1">
+                    <span>Received:</span>
+                    <span>{receipt.receivedAmount.toLocaleString()} MMK</span>
+                  </div>
+                  <div className="flex justify-between text-slate-900 font-bold">
+                    <span>Change:</span>
+                    <span>
+                      {(receipt.changeAmount || 0).toLocaleString()} MMK
+                    </span>
+                  </div>
+                </>
+              )}
           </div>
 
           {/* Footer Message */}
           <div className="pt-4 text-center space-y-1 text-[10px] text-slate-600">
-            <p className="font-semibold">{receipt.receiptFooter || "Thank you for shopping with us!"}</p>
+            <p className="font-semibold">
+              {receipt.receiptFooter || "Thank you for shopping with us!"}
+            </p>
             <p>Please keep this receipt for returns/warranty.</p>
-            <p className="text-[9px] text-slate-400 pt-2">Powered by Kanitt POS Systems</p>
+            <p className="text-[9px] text-slate-400 pt-2">
+              Powered by Kanitt POS Systems
+            </p>
           </div>
         </div>
 
+        {receipt.orderId && (
+          <section className="mb-3 flex items-center gap-3 rounded-2xl border border-sky-400/20 bg-sky-400/5 p-3">
+            {qrDataUrl ? <img src={qrDataUrl} alt="Digital receipt QR code" className="h-24 w-24 rounded-lg bg-white p-1" /> : <QrCode className="h-12 w-12 shrink-0 text-sky-300" />}
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-white">Digital receipt</p>
+              <p className="mt-1 text-xs text-slate-400">Customer can scan this QR to open the receipt and save it as PDF.</p>
+              {remainingSeconds > 0 ? <p className="mt-1 text-xs text-amber-300">QR expires in {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}</p> : <p className="mt-1 text-xs text-rose-300">{digitalUrl ? "QR expired. Show a fresh code." : "Create a QR code for this receipt."}</p>}
+              {qrError && <p className="mt-1 text-xs text-rose-300">{qrError}</p>}
+              {remainingSeconds === 0 && <button onClick={() => void refreshDigitalReceipt()} disabled={refreshingQr || !onRefreshDigitalReceipt} className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshingQr ? "animate-spin" : ""}`} />{refreshingQr ? "Refreshing…" : "Show QR again"}</button>}
+              {digitalUrl && <button onClick={() => void navigator.clipboard?.writeText(digitalUrl)} className="ml-2 mt-2 text-xs font-semibold text-sky-300">Copy link</button>}
+            </div>
+          </section>
+        )}
+
         {/* Action Controls */}
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex flex-wrap items-center gap-2 pt-2">
           <button
             onClick={onClose}
             className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 text-xs font-bold text-slate-300 transition hover:bg-slate-700 hover:text-white"
           >
             Close
           </button>
-          <button
-            onClick={handlePrint}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 py-3 text-xs font-bold text-slate-950 transition hover:bg-sky-300"
-          >
-            <Printer className="h-4 w-4" /> Print Thermal
-          </button>
+          <div className="flex flex-1 gap-2">
+            <button
+              onClick={() => { setPreviewFormat("receipt"); handlePrint("receipt"); }}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-400 py-3 text-xs font-bold text-slate-950 transition hover:bg-sky-300"
+            >
+              <Printer className="h-4 w-4" /> Receipt {paperWidth}mm{defaultFormat === "receipt" ? " · Default" : ""}
+            </button>
+            <button
+              onClick={() => { setPreviewFormat("a4"); handlePrint("a4"); }}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-sky-400/50 bg-slate-800 py-3 text-xs font-bold text-sky-200 transition hover:bg-slate-700"
+            >
+              <Printer className="h-4 w-4" /> A4 page{defaultFormat === "a4" ? " · Default" : ""}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

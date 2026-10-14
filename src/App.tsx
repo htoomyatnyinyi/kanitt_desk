@@ -9,6 +9,7 @@ import {
   useCreateOrderMutation,
   useQuoteOrderMutation,
   useCompleteOrderMutation,
+  useCreateDigitalReceiptLinkMutation,
   useGetOrdersQuery,
   useGetStoreSettingsQuery,
   useGetCategoriesQuery,
@@ -29,6 +30,7 @@ import {
   useCreateStaffMutation,
   useUpdateStaffMutation,
   useAdjustStockMutation,
+  useGetInventoryMovementsQuery,
   useGetPurchaseOrdersQuery,
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,
@@ -148,18 +150,26 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     isError: isProductsError,
     refetch: refetchProducts,
   } = useGetProductsQuery({ storeId: selectedStore?.id });
+  const { data: inventoryMovements = [] } = useGetInventoryMovementsQuery(
+    { storeId: selectedStore?.id },
+    { skip: !selectedStore?.id },
+  );
   const {
     data: apiStores,
     isError: isStoresError,
     refetch: refetchStores,
   } = useGetStoresQuery();
-  const { data: apiSessions, refetch: refetchSessions } = useGetSessionsQuery({
-    storeId: selectedStore?.id,
-  });
+  const { data: apiSessions, refetch: refetchSessions } = useGetSessionsQuery(
+    { storeId: selectedStore?.id },
+    { pollingInterval: 5000, refetchOnFocus: true, refetchOnReconnect: true },
+  );
   const { data: apiStoreSettings = [] } = useGetStoreSettingsQuery(
     { storeId: selectedStore?.id },
     { skip: !selectedStore?.id },
   );
+  const registerSessionMode = String(
+    apiStoreSettings.find((setting: any) => setting.settingKey === "register_session_mode")?.settingValue ?? "SHARED",
+  ).toUpperCase() === "INDIVIDUAL" ? "INDIVIDUAL" : "SHARED";
   const {
     data: apiOrders = [],
     isLoading: isOrdersLoading,
@@ -211,6 +221,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
   const [completeOrderApi, { isLoading: isCompletingOrder }] =
     useCompleteOrderMutation();
+  const [createDigitalReceiptLinkApi] = useCreateDigitalReceiptLinkMutation();
 
   // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
   useEffect(() => {
@@ -511,6 +522,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const handleCheckoutSuccess = async (
     payments?: { method: string; amount: number }[],
   ) => {
+    let completedOrderId: string | undefined;
+    let digitalReceipt: { url: string; expiresAt: string } | undefined;
     if (!orderPricing || pricingError) {
       setCheckoutError(
         pricingError ||
@@ -519,13 +532,25 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       return;
     }
     if (isConnected && selectedStore) {
-      const activeSession = (apiSessions ?? []).find(
+      let currentSessions = apiSessions ?? [];
+      let activeSession = currentSessions.find(
         (session) =>
-          session.storeId === selectedStore.id && session.status === "OPEN",
+          session.storeId === selectedStore.id && session.status === "OPEN" &&
+          (registerSessionMode === "SHARED" || session.userId === authUser?.id),
       );
       if (!activeSession) {
+        const refreshed = await refetchSessions();
+        currentSessions = refreshed.data ?? currentSessions;
+        activeSession = currentSessions.find(
+          (session) => session.storeId === selectedStore.id && session.status === "OPEN" &&
+            (registerSessionMode === "SHARED" || session.userId === authUser?.id),
+        );
+      }
+      if (!activeSession) {
         setCheckoutError(
-          "Open a register session for this store before completing a sale.",
+          registerSessionMode === "SHARED"
+            ? "There is no open register session for this store. Open the register before checkout."
+            : "Open your own register session before completing a sale.",
         );
         return;
       }
@@ -604,6 +629,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           return;
         }
         const order = result?.order ?? result?.data?.order ?? result;
+        completedOrderId = order?.id;
+        digitalReceipt = result?.digitalReceipt ?? result?.data?.digitalReceipt;
         if (order?.id && order.status === "PENDING")
           await completeOrderApi(order.id).unwrap();
       } catch (e) {
@@ -625,6 +652,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     }
     const completedReceiptData: ReceiptData = {
       orderNumber: checkoutOrderNumber,
+      orderId: completedOrderId,
+      digitalReceiptUrl: digitalReceipt?.url,
+      digitalReceiptExpiresAt: digitalReceipt?.expiresAt,
       createdAt: new Date().toISOString(),
       storeName: selectedStore?.name,
       storeId: selectedStore?.id,
@@ -684,6 +714,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         selectedStore={selectedStore}
         setSelectedStore={setSelectedStore}
         storeError={isStoresError}
+        hasQueuedSales={queuedSales.length > 0}
         onLogout={onLogout}
       />
 
@@ -895,6 +926,74 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         <InventoryView
           storeId={selectedStore?.id}
           userRole={userRole}
+          userPermissions={userPermissions}
+          stores={transferDestinationStores.map((store) => ({ id: store.id, name: store.name }))}
+          suppliers={suppliers.map((supplier: any) => ({
+            id: supplier.id,
+            name: supplier.name,
+            leadTimeDays: supplier.leadTimeDays,
+          }))}
+          movements={inventoryMovements}
+          onAdjustStock={(payload) =>
+            adjustStock({
+              storeId: selectedStore!.id,
+              productId: payload.productId,
+              variantId: payload.variantId,
+              lotId: payload.lotId,
+              quantityIsBaseUnit: payload.quantityIsBaseUnit,
+              quantity: payload.quantity,
+              movementType: payload.reason.toLowerCase().includes("expired")
+                ? "EXPIRED"
+                : payload.reason.toLowerCase().includes("damage") || payload.reason.toLowerCase().includes("quarantine")
+                  ? "DAMAGE"
+                  : "ADJUSTMENT",
+              reason: [payload.reason, payload.notes].filter(Boolean).join(" · "),
+            }).unwrap()
+          }
+          onDisposeStock={(payload) =>
+            adjustStock({
+              storeId: selectedStore!.id,
+              productId: payload.productId,
+              variantId: payload.variantId,
+              lotId: payload.lotId,
+              quantityIsBaseUnit: true,
+              quantity: payload.quantity,
+              movementType: payload.reason === "expired_disposal" ? "EXPIRED" : "DAMAGE",
+              reason: [payload.reason, payload.notes].filter(Boolean).join(" · "),
+            }).unwrap()
+          }
+          onTransferStock={(payload) =>
+            createTransfer({
+              fromStoreId: payload.fromStoreId,
+              toStoreId: payload.toStoreId,
+              notes: payload.notes,
+              items: [{
+                productId: payload.productId,
+                variantId: payload.variantId,
+                quantity: payload.quantity,
+              }],
+            }).unwrap()
+          }
+          onCreatePurchaseOrder={(po) =>
+            createPurchaseOrder({
+              storeId: po.storeId,
+              supplierId: po.supplierId,
+              status: po.status,
+              expectedDate: po.expectedDate,
+              subTotal: po.subtotal,
+              taxAmount: 0,
+              grandTotal: po.total,
+              currencyCode: "MMK",
+              notes: po.notes,
+              items: po.lines.map((line) => ({
+                productId: line.productId,
+                variantId: line.variantId,
+                quantity: line.quantity,
+                unitCost: line.unitCost,
+                totalCost: line.quantity * line.unitCost,
+              })),
+            }).unwrap()
+          }
           onRequestSubmitted={() => setActiveTab("requests")}
           products={products.flatMap((product) =>
             (product.variants ?? []).map((variant) => ({
@@ -926,6 +1025,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           orders={apiOrders}
           storeId={selectedStore?.id}
           storeName={selectedStore?.name}
+          userId={authUser?.id}
+          userRole={userRole}
+          sessionMode={registerSessionMode}
           onOpen={(storeId, openingBalance) =>
             openRegisterSession({ storeId, openingBalance }).unwrap()
           }
@@ -948,6 +1050,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           canEditStoreSettings={["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(
             userRole,
           )}
+          canEditRegisterSessionMode={["ADMIN", "SUPER_ADMIN"].includes(userRole)}
         />
       )}
 
@@ -967,6 +1070,10 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       <ReceiptModal
         receipt={currentReceipt}
         onClose={() => setCurrentReceipt(null)}
+        onRefreshDigitalReceipt={async (orderId) => {
+          const response: any = await createDigitalReceiptLinkApi(orderId).unwrap();
+          return response?.digitalReceipt ?? response?.data?.digitalReceipt ?? null;
+        }}
       />
     </div>
   );
