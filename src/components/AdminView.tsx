@@ -29,6 +29,7 @@ import {
   useCreateApiKeyMutation,
   useRevokeApiKeyMutation,
   useGetSubscriptionQuery,
+  useRevokeOfflineLicenseMutation,
   useGetNotificationsQuery,
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
@@ -794,6 +795,8 @@ function ApiKeysPanel({ currentUserId }: { currentUserId?: string }) {
 
 function SubscriptionPanel() {
   const { data, isFetching, refetch } = useGetSubscriptionQuery();
+  const [revokeOfflineLicense, { isLoading: revokingLicense }] = useRevokeOfflineLicenseMutation();
+  const [revokingLicenseId, setRevokingLicenseId] = useState("");
   const [reqDialog, setReqDialog] = useState(false);
   const [form, setForm] = useState({
     planId: "",
@@ -807,6 +810,8 @@ function SubscriptionPanel() {
   const plans: any[] = data?.plans ?? [];
   const payments: any[] = data?.payments ?? [];
   const requests: any[] = data?.requests ?? [];
+  const offlineLicenses: any[] = data?.offlineLicenses ?? [];
+  const offlinePolicy = data?.offlinePolicy;
   const statusColor: Record<string, string> = {
     ACTIVE: "bg-emerald-400/10 text-emerald-300",
     EXPIRED: "bg-rose-400/10 text-rose-300",
@@ -867,12 +872,19 @@ function SubscriptionPanel() {
             </span>
           )}
         </div>
-        {subscription?.expiresAt && (
+        {(subscription?.endDate || subscription?.expiresAt) && (
           <p className="mt-2 text-xs text-slate-400">
-            Expires: {new Date(subscription.expiresAt).toLocaleDateString()}
+            Expires: {new Date(subscription.endDate || subscription.expiresAt).toLocaleDateString()}
           </p>
         )}
       </div>
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h3 className="font-bold text-white">Offline device controls</h3><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Checkout is blocked when the subscription expires or is suspended. Devices need a short server-issued license to sell offline; queued sales must sync before their deadline.</p></div>
+          {offlinePolicy && <span className="rounded-full bg-sky-400/10 px-3 py-1 text-[10px] font-bold text-sky-200">{offlinePolicy.offlineLicenseHours}h license · {offlinePolicy.offlineSalesPerDevice} sales/device · {offlinePolicy.syncGraceHours}h sync window</span>}
+        </div>
+        {offlineLicenses.length ? <div className="mt-4 divide-y divide-slate-800 rounded-xl border border-slate-800">{offlineLicenses.map((license: any) => <div key={license.id} className="flex flex-wrap items-center justify-between gap-3 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-100">{license.store?.name ?? "Store"} · {license.user?.name ?? license.user?.email ?? "Staff"}</p><p className="mt-1 text-xs text-slate-500">Device {String(license.deviceId).slice(0, 8)}… · {license.salesUsed}/{license.maxSales} sales · Expires {new Date(license.expiresAt).toLocaleString()}</p><p className="mt-1 text-[10px] text-slate-500">Sync deadline {new Date(license.syncDeadline).toLocaleString()}</p></div><div className="flex items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${license.status === "ACTIVE" && new Date(license.expiresAt) > new Date() ? "bg-emerald-400/10 text-emerald-300" : license.status === "REVOKED" ? "bg-rose-400/10 text-rose-300" : "bg-slate-700 text-slate-300"}`}>{license.status === "ACTIVE" && new Date(license.expiresAt) <= new Date() ? "EXPIRED" : license.status}</span>{license.status === "ACTIVE" && <button disabled={revokingLicense} onClick={async () => { if (!confirm("Revoke this offline device license? The device can remain offline until its local license expires, and its unsynced sales may be rejected.")) return; setRevokingLicenseId(license.id); setErr(""); try { await revokeOfflineLicense(license.id).unwrap(); setOk("Offline device license revoked."); await refetch(); } catch (error: any) { setErr(error?.data?.message ?? "Could not revoke this device license."); } finally { setRevokingLicenseId(""); } }} className="inline-flex items-center gap-1 rounded-lg border border-rose-400/20 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-400/10 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />{revokingLicenseId === license.id ? "Revoking…" : "Revoke"}</button>}</div></div>)}</div> : <p className="mt-4 text-xs text-slate-500">No offline device licenses have been issued yet. A register gets authorized when it is online.</p>}
+      </section>
       {plans.length > 0 && (
         <div>
           <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">

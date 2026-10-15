@@ -10,6 +10,7 @@ import {
   useQuoteOrderMutation,
   useCompleteOrderMutation,
   useCreateDigitalReceiptLinkMutation,
+  useIssueOfflineLicenseMutation,
   useGetOrdersQuery,
   useGetStoreSettingsQuery,
   useGetCategoriesQuery,
@@ -76,6 +77,9 @@ import { ReportsView } from "./components/ReportsView";
 import { ReceiptModal, ReceiptData } from "./components/ReceiptModal";
 import {
   queueSale,
+  cacheOfflineLicense,
+  getCachedOfflineLicense,
+  getOfflineDeviceId,
   readQueuedSales,
   removeQueuedSale,
   updateQueuedSaleError,
@@ -129,6 +133,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     () => `POS-${crypto.randomUUID()}`,
   );
   const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
+  const [offlineLicense, setOfflineLicense] = useState<any>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [queuedSales, setQueuedSales] = useState<QueuedSale[]>(() =>
     readQueuedSales(),
@@ -222,6 +227,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [completeOrderApi, { isLoading: isCompletingOrder }] =
     useCompleteOrderMutation();
   const [createDigitalReceiptLinkApi] = useCreateDigitalReceiptLinkMutation();
+  const [issueOfflineLicense] = useIssueOfflineLicenseMutation();
 
   // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
   useEffect(() => {
@@ -301,6 +307,15 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       try {
         const result: any = await createOrderApi(sale.payload).unwrap();
         const order = result?.order ?? result?.data?.order ?? result;
+        const used = result?.offlineLicenseSalesUsed ?? result?.data?.offlineLicenseSalesUsed;
+        if (Number.isFinite(used) && sale.payload.offlineLicenseId) {
+          const cached = getCachedOfflineLicense(sale.payload.storeId);
+          if (cached?.id === sale.payload.offlineLicenseId) {
+            const updatedLicense = { ...cached, salesUsed: used };
+            cacheOfflineLicense(updatedLicense);
+            setOfflineLicense(updatedLicense);
+          }
+        }
         if (order?.id && order.status === "PENDING")
           await completeOrderApi(order.id).unwrap();
         setQueuedSales(removeQueuedSale(sale.id));
@@ -322,6 +337,28 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   useEffect(() => {
     if (isConnected && queuedSales.length > 0) void flushQueuedSales();
   }, [isConnected]);
+
+  useEffect(() => {
+    setOfflineLicense(getCachedOfflineLicense(selectedStore?.id));
+    if (!isConnected || !selectedStore?.id) return;
+    try {
+      const deviceId = getOfflineDeviceId();
+      void issueOfflineLicense({ storeId: selectedStore.id, deviceId })
+        .unwrap()
+        .then((response: any) => {
+          const license = response?.license ?? response?.data?.license;
+          if (license) {
+            cacheOfflineLicense(license);
+            setOfflineLicense(license);
+          }
+        })
+        .catch(() => {
+          // Retain the last signed lease for a bounded offline period.
+        });
+    } catch {
+      setOfflineLicense(null);
+    }
+  }, [isConnected, selectedStore?.id, issueOfflineLicense]);
 
   // Normalize API products — fix category union type to plain string
   const products: Product[] = (() => {
@@ -524,21 +561,24 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   ) => {
     let completedOrderId: string | undefined;
     let digitalReceipt: { url: string; expiresAt: string } | undefined;
-    if (!orderPricing || pricingError) {
+    const cachedLicense = selectedStore
+      ? (offlineLicense?.storeId === selectedStore.id ? offlineLicense : getCachedOfflineLicense(selectedStore.id))
+      : null;
+    if (!orderPricing || (pricingError && isConnected)) {
       setCheckoutError(
         pricingError ||
           "Wait for the server to calculate this sale before taking payment.",
       );
       return;
     }
-    if (isConnected && selectedStore) {
+    if (selectedStore) {
       let currentSessions = apiSessions ?? [];
       let activeSession = currentSessions.find(
         (session) =>
           session.storeId === selectedStore.id && session.status === "OPEN" &&
           (registerSessionMode === "SHARED" || session.userId === authUser?.id),
       );
-      if (!activeSession) {
+      if (!activeSession && isConnected) {
         const refreshed = await refetchSessions();
         currentSessions = refreshed.data ?? currentSessions;
         activeSession = currentSessions.find(
@@ -604,6 +644,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         };
         let result: any;
         try {
+          // Do not rely only on the health indicator here: it can lag behind
+          // the actual network. Try the authoritative online checkout first.
           result = await createOrderApi(payload).unwrap();
         } catch (error) {
           const failure = error as {
@@ -613,10 +655,18 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           };
           const transportFailure =
             failure.status === "FETCH_ERROR" ||
-            failure.status === "TIMEOUT_ERROR" ||
-            (typeof failure.status === "number" && failure.status >= 500);
+            failure.status === "TIMEOUT_ERROR";
           if (!transportFailure) throw error;
-          const updatedQueue = queueSale(payload);
+          let updatedQueue: QueuedSale[];
+          try {
+            updatedQueue = queueSale(payload, cachedLicense);
+          } catch (queueError) {
+            throw new Error(
+              queueError instanceof Error
+                ? `${queueError.message} Connect while online and retry checkout so this register can receive its offline allowance.`
+                : "This register has no valid offline checkout license. Reconnect and retry checkout.",
+            );
+          }
           setQueuedSales(updatedQueue);
           alert(
             "Sale saved on this device and queued for sync. Keep this register session open until it syncs.",
@@ -634,10 +684,29 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         if (order?.id && order.status === "PENDING")
           await completeOrderApi(order.id).unwrap();
       } catch (e) {
-        const apiError = e as { data?: { message?: string }; error?: string };
+        const apiError = e as any;
+        const responseData = apiError?.data;
+        const serverMessage = [
+          responseData?.message,
+          responseData?.data?.message,
+          responseData?.error,
+          responseData?.data?.error,
+          typeof responseData === "string" ? responseData : undefined,
+          apiError?.error?.data?.message,
+          apiError?.error?.message,
+          typeof apiError?.error === "string" ? apiError.error : undefined,
+          apiError?.message,
+        ].find((message) => typeof message === "string" && message.trim());
+        const statusHint =
+          apiError?.status === 403
+            ? "Checkout was denied. Check the workspace subscription status and your account permissions."
+            : typeof apiError?.status === "number"
+              ? `The server could not complete checkout (HTTP ${apiError.status}).`
+              : undefined;
         setCheckoutError(
-          apiError.data?.message ||
-            apiError.error ||
+          serverMessage ||
+            statusHint ||
+            (e instanceof Error ? e.message : "") ||
             "Could not complete the order. Please try again.",
         );
         return;
@@ -873,6 +942,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
           lastSync={lastSync}
           onSync={syncWithServer}
           queuedSales={queuedSales}
+          offlineLicense={offlineLicense ?? getCachedOfflineLicense(selectedStore?.id)}
           onDiscardSale={(id) => setQueuedSales(removeQueuedSale(id))}
         />
       )}

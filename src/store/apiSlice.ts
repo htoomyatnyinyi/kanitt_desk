@@ -111,6 +111,9 @@ export interface OrderInput {
   promotionCode?: string;
   pricingToken?: string;
   quotedPricing?: Record<string, unknown>;
+  offlineSale?: boolean;
+  offlineLicenseId?: string;
+  offlineLicenseToken?: string;
   discountAmount?: number;
   currencyCode?: string;
   storeId: string;
@@ -1021,6 +1024,13 @@ export const kanittApi = createApi({
       }),
       invalidatesTags: ["Subscription"],
     }),
+    issueOfflineLicense: builder.mutation<any, { storeId: string; deviceId: string }>({
+      query: (body) => ({ url: "/tenant/subscription/offline-license", method: "POST", body }),
+    }),
+    revokeOfflineLicense: builder.mutation<any, string>({
+      query: (id) => ({ url: `/tenant/subscription/offline-license/${id}/revoke`, method: "POST" }),
+      invalidatesTags: ["Subscription"],
+    }),
 
     // ── Admin: Notifications ─────────────────────────────────────────────
     getNotifications: builder.query<
@@ -1146,6 +1156,8 @@ export const {
   useRevokeApiKeyMutation,
   useGetSubscriptionQuery,
   useRequestSubscriptionMutation,
+  useIssueOfflineLicenseMutation,
+  useRevokeOfflineLicenseMutation,
   useGetNotificationsQuery,
   useGetNotificationUnreadCountQuery,
   useMarkNotificationReadMutation,
