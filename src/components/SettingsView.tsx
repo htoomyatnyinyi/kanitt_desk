@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { Printer, Server, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import {
   escapeHtml,
   listSystemPrinters,
   printIsolatedHtml,
+  printThermalReceipt,
   printToDefaultPrinter,
   SystemPrinter,
 } from "../services/print";
@@ -45,6 +47,8 @@ export function SettingsView({
     import.meta.env.VITE_API_URL || "https://dev.oasislab.de5.net";
   const [profile, setProfile] = useState<PrinterProfile>(defaultProfile);
   const [systemPrinters, setSystemPrinters] = useState<SystemPrinter[]>([]);
+  const [printerLoading, setPrinterLoading] = useState(true);
+  const [printerMessage, setPrinterMessage] = useState("");
   const [receiptHeader, setReceiptHeader] = useState(storeName || "");
   const [receiptFooter, setReceiptFooter] = useState(
     "Thank you for shopping with us!",
@@ -81,6 +85,7 @@ export function SettingsView({
 
   useEffect(() => {
     let active = true;
+    setPrinterLoading(true);
     try {
       const saved = localStorage.getItem(profileKey(storeId));
       const parsed = saved ? JSON.parse(saved) : {};
@@ -88,8 +93,11 @@ export function SettingsView({
         if (!active) return;
         setSystemPrinters(printers);
         const hasSavedPrinterChoice = typeof parsed.printerName === "string";
+        const matchedSavedPrinter = printers.find((printer) =>
+          printer.target === parsed.printerName || printer.name === parsed.printerName,
+        );
         const printerName = hasSavedPrinterChoice
-          ? parsed.printerName
+          ? matchedSavedPrinter?.target || parsed.printerName
           : printers.find((printer) => printer.isDefault)?.name || "";
         const nextProfile = {
         paperWidth: parsed.paperWidth === "58" ? "58" : "80",
@@ -101,6 +109,7 @@ export function SettingsView({
         if (!hasSavedPrinterChoice && printerName) {
           localStorage.setItem(profileKey(storeId), JSON.stringify(nextProfile));
         }
+        setPrinterLoading(false);
       }).catch(() => {
         if (active) {
           setSystemPrinters([]);
@@ -110,6 +119,8 @@ export function SettingsView({
             printerName: parsed.printerName || "",
             autoPrintReceipt: parsed.autoPrintReceipt === true,
           });
+          setPrinterMessage("Could not find printers. Check the connection and refresh the list.");
+          setPrinterLoading(false);
         }
       });
     } catch {
@@ -141,18 +152,32 @@ export function SettingsView({
   };
 
   const runTestPrint = async () => {
+    setPrinterMessage("");
     const store = escapeHtml(storeName || "KANITT POS");
     const width = profile.paperWidth;
     const testContent = `PRINTER TEST\n${store}\nPaper width: ${width} mm\n${new Date().toLocaleString()}\n`;
     try {
-      if (await printToDefaultPrinter(testContent, profile.printerName)) return;
-    } catch {
-      // Fall through to the isolated OS dialog when the default printer is unavailable.
+      if (profile.printerName) {
+        await printThermalReceipt(testContent, profile.printerName, width);
+        setPrinterMessage("Test print sent. Check the selected printer.");
+        return;
+      }
+      const tauriWindow = window as Window & { __TAURI_INTERNALS__?: unknown };
+      if ((isTauri() || !!tauriWindow.__TAURI_INTERNALS__) && /android/i.test(navigator.userAgent)) {
+        throw new Error("Pair a thermal printer in Android settings, refresh the printer list, and select it here.");
+      }
+      if (await printToDefaultPrinter(testContent)) {
+        setPrinterMessage("Test print sent to the OS default printer.");
+        return;
+      }
+      printIsolatedHtml(
+        `<main id="kanitt-printer-test"><h2>${store}</h2><p>PRINTER TEST</p><hr><p>Paper width: ${width} mm</p><p>${escapeHtml(new Date().toLocaleString())}</p><p>Printer is selected in the system print dialog.</p></main>`,
+        `@page { size: ${width}mm auto; margin: 0; } html, body { margin: 0; padding: 0; } #kanitt-printer-test { box-sizing: border-box; width: ${width}mm; padding: 4mm; color: #000; background: #fff; font: 12px monospace; }`,
+      );
+      setPrinterMessage("Print dialog opened. Choose the printer and confirm printing.");
+    } catch (error) {
+      setPrinterMessage(error instanceof Error ? error.message : String(error));
     }
-    printIsolatedHtml(
-      `<main id="kanitt-printer-test"><h2>${store}</h2><p>PRINTER TEST</p><hr><p>Paper width: ${width} mm</p><p>${escapeHtml(new Date().toLocaleString())}</p><p>Printer is selected in the system print dialog.</p></main>`,
-      `@page { size: ${width}mm auto; margin: 0; } html, body { margin: 0; padding: 0; } #kanitt-printer-test { box-sizing: border-box; width: ${width}mm; padding: 4mm; color: #000; background: #fff; font: 12px monospace; }`,
-    );
   };
 
   const saveStoreReceiptSettings = async () => {
@@ -288,30 +313,45 @@ export function SettingsView({
             This Register Printer
           </h3>
           <p className="mb-4 text-xs leading-5 text-slate-500">
-            Choose a printer and format once for this register. Tauri sends
-            receipts directly to that printer; set its 58/80 mm or A4 paper
-            size in the printer driver.
+            Choose a thermal printer once for this register. Thermal receipts
+            are sent directly; A4 printing uses the system print dialog.
           </p>
           <label className="mb-4 block text-xs font-semibold text-slate-300">
-            Printer for this register
+            Thermal receipt printer
+            <button
+              type="button"
+              onClick={() => {
+                setPrinterLoading(true);
+                setPrinterMessage("");
+                void listSystemPrinters()
+                  .then(setSystemPrinters)
+                  .catch((error: unknown) => setPrinterMessage(
+                    error instanceof Error ? error.message : String(error),
+                  ))
+                  .finally(() => setPrinterLoading(false));
+              }}
+              className="float-right text-[10px] font-bold text-sky-300 hover:text-sky-200"
+            >
+              {printerLoading ? "Searching…" : "Refresh printers"}
+            </button>
             <select
               value={profile.printerName}
               onChange={(event) => saveProfile({ ...profile, printerName: event.target.value })}
               className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
             >
-              <option value="">Use OS default printer</option>
-              {profile.printerName && !systemPrinters.some((printer) => printer.name === profile.printerName) && (
+              <option value="">{/android/i.test(navigator.userAgent) ? "Select a paired thermal printer" : "Use OS default printer"}</option>
+              {profile.printerName && !systemPrinters.some((printer) => printer.target === profile.printerName || printer.name === profile.printerName) && (
                 <option value={profile.printerName}>Unavailable: {profile.printerName}</option>
               )}
               {systemPrinters.map((printer) => (
-                <option key={printer.name} value={printer.name}>
-                  {printer.name}{printer.isDefault ? " (OS default)" : ""}
+                <option key={printer.target} value={printer.target}>
+                  {printer.name}{printer.connection ? ` · ${printer.connection}` : ""}{printer.isDefault ? " (OS default)" : ""}{printer.status ? ` · ${printer.status}` : ""}
                 </option>
               ))}
             </select>
-            {systemPrinters.length === 0 && (
+            {!printerLoading && systemPrinters.length === 0 && (
               <span className="mt-1 block text-[10px] font-normal text-slate-500">
-                No printer queues found. Install a printer in OS settings first.
+                No thermal printers found. Pair Bluetooth printers in Android settings or check the USB/network connection, then refresh.
               </span>
             )}
           </label>
@@ -350,10 +390,10 @@ export function SettingsView({
           <label className="mt-4 flex cursor-pointer items-center justify-between rounded-xl bg-slate-950 p-3">
             <span>
               <span className="block text-xs font-semibold text-white">
-                Open print dialog automatically after checkout
+                Print automatically after checkout
               </span>
               <span className="mt-1 block text-[10px] text-slate-500">
-                Send the selected format to this register's default printer after checkout.
+                Thermal receipts print directly. A4 and browser printing may ask you to confirm in the system dialog.
               </span>
             </span>
             <input
@@ -369,7 +409,7 @@ export function SettingsView({
             />
           </label>
           <button
-            onClick={runTestPrint}
+            onClick={() => void runTestPrint()}
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-3 text-xs font-bold text-slate-950 hover:bg-sky-300"
           >
             <Printer className="h-4 w-4" />
@@ -379,6 +419,11 @@ export function SettingsView({
             Test print goes to the selected register printer using its driver
             paper size. Web mode falls back to the OS print dialog.
           </p>
+          {printerMessage && (
+            <p role="status" className={`mt-2 rounded-lg px-3 py-2 text-xs ${printerMessage.startsWith("Test print sent") || printerMessage.startsWith("Print dialog opened") ? "bg-emerald-400/10 text-emerald-200" : "bg-rose-400/10 text-rose-200"}`}>
+              {printerMessage}
+            </p>
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">

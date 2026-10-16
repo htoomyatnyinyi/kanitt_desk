@@ -1,4 +1,14 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import {
+  ENCODE,
+  cut,
+  feed,
+  list_thermal_printers,
+  print_thermal_printer,
+  text,
+  type PrinterInfo,
+  type PaperSize,
+} from "tauri-plugin-thermal-printer";
 
 function stylesheetLinks() {
   const links = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
@@ -53,12 +63,44 @@ export function printIsolatedHtml(contentHtml: string, printCss: string) {
 export interface SystemPrinter {
   name: string;
   isDefault: boolean;
+  target: string;
+  connection?: string;
+  status?: string;
 }
 
 export async function listSystemPrinters(): Promise<SystemPrinter[]> {
   const tauriWindow = window as Window & { __TAURI_INTERNALS__?: unknown };
   if (!isTauri() && !tauriWindow.__TAURI_INTERNALS__) return [];
-  return invoke<SystemPrinter[]>("list_printers");
+  const isAndroid = /android/i.test(navigator.userAgent);
+  if (isAndroid) {
+    const printers = await list_thermal_printers();
+    return printers.map((printer: PrinterInfo) => ({
+      name: printer.name,
+      target: printer.identifier,
+      connection: printer.interface_type,
+      status: printer.status,
+      isDefault: false,
+    }));
+  }
+  const printers = await invoke<Array<{ name: string; isDefault: boolean }>>(
+    "list_printers",
+  );
+  return printers.map((printer) => ({ ...printer, target: printer.name }));
+}
+
+export async function printThermalReceipt(
+  receiptText: string,
+  printerTarget: string,
+  paperWidth: "58" | "80",
+) {
+  if (!printerTarget) throw new Error("Select a receipt printer in Settings first.");
+  const paperSize: PaperSize = paperWidth === "58" ? "Mm58" : "Mm80";
+  await print_thermal_printer({
+    printer: printerTarget,
+    paper_size: paperSize,
+    options: { code_page: 0, encode: ENCODE.UTF_8, use_gbk: false },
+    sections: [text(receiptText), feed(3), cut("partial", 0)],
+  });
 }
 
 export async function printToDefaultPrinter(receiptText: string, printerName?: string) {

@@ -1,9 +1,10 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+use std::process::Command;
 use serde::Serialize;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -154,6 +155,9 @@ fn list_printers() -> Result<Vec<PrinterOption>, String> {
             .collect()
     };
 
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    let printers: Vec<PrinterOption> = Vec::new();
+
     Ok(printers)
 }
 
@@ -161,6 +165,7 @@ fn list_printers() -> Result<Vec<PrinterOption>, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_thermal_printer::init())
         .invoke_handler(tauri::generate_handler![greet, list_printers, print_receipt_silently])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

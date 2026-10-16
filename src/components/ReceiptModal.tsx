@@ -1,7 +1,12 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
 import { Printer, X, Check, RefreshCw, QrCode } from "lucide-react";
 import QRCode from "qrcode";
-import { printIsolatedHtml, printToDefaultPrinter } from "../services/print";
+import {
+  printIsolatedHtml,
+  printThermalReceipt,
+  printToDefaultPrinter,
+} from "../services/print";
 
 export interface ReceiptData {
   orderNumber: string;
@@ -115,10 +120,23 @@ function formatReceiptText(receipt: ReceiptData, format: PrintFormat, paperWidth
 }
 
 async function printReceiptElement(sourceEl: HTMLElement, receipt: ReceiptData, paperWidth: string, format: PrintFormat, printerName?: string) {
-  try {
-    if (await printToDefaultPrinter(formatReceiptText(receipt, format, paperWidth), printerName)) return;
-  } catch {
-    // If the native spooler is unavailable, fall back to the OS print dialog.
+  if (format === "receipt") {
+    const receiptText = formatReceiptText(receipt, format, paperWidth);
+    if (printerName) {
+      await printThermalReceipt(receiptText, printerName, paperWidth as "58" | "80");
+      return "sent" as const;
+    }
+    const tauriWindow = window as Window & { __TAURI_INTERNALS__?: unknown };
+    const runningInTauri = isTauri() || !!tauriWindow.__TAURI_INTERNALS__;
+    if (runningInTauri && /android/i.test(navigator.userAgent)) {
+      throw new Error("Pair a thermal printer and select it in Settings before printing.");
+    }
+    try {
+      if (await printToDefaultPrinter(receiptText)) return "sent" as const;
+    } catch (error) {
+      if (runningInTauri) throw error;
+      // Continue to the browser print dialog outside the native application.
+    }
   }
   const pageSize = format === "a4" ? "A4 portrait" : `${paperWidth}mm auto`;
   const contentWidth = format === "a4" ? "190mm" : `${paperWidth}mm`;
@@ -143,11 +161,13 @@ async function printReceiptElement(sourceEl: HTMLElement, receipt: ReceiptData, 
     #kanitt-print-root * { color: #000 !important; visibility: visible !important; }
     #kanitt-print-root h2 { font-size: ${format === "a4" ? "22pt" : "16px"} !important; font-weight: 900 !important; }
   `);
+  return "dialog" as const;
 }
 
 export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: ReceiptModalProps) {
   const autoPrintedReceipt = useRef<string | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const printingRef = useRef(false);
   const [previewFormat, setPreviewFormat] = useState<PrintFormat>("receipt");
   const [digitalUrl, setDigitalUrl] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -155,6 +175,8 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
   const [refreshingQr, setRefreshingQr] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [qrError, setQrError] = useState("");
+  const [printMessage, setPrintMessage] = useState("");
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const printerProfile = receipt?.storeId
     ? localStorage.getItem("kanitt:printer-profile:" + receipt.storeId)
@@ -172,9 +194,21 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
   } catch {}
 
   const handlePrint = useCallback((format: PrintFormat = defaultFormat) => {
-    if (receiptRef.current && receipt) {
-      void printReceiptElement(receiptRef.current, receipt, paperWidth, format, printerName);
-    }
+    if (!receiptRef.current || !receipt || printingRef.current) return;
+    printingRef.current = true;
+    setIsPrinting(true);
+    setPrintMessage("");
+    void printReceiptElement(receiptRef.current, receipt, paperWidth, format, printerName)
+      .then((result) => setPrintMessage(
+        result === "sent" ? "Print job sent to the selected printer." : "Print dialog opened. Choose the printer and confirm printing.",
+      ))
+      .catch((error: unknown) => setPrintMessage(
+        error instanceof Error ? error.message : String(error || "Could not print this receipt."),
+      ))
+      .finally(() => {
+        printingRef.current = false;
+        setIsPrinting(false);
+      });
   }, [receipt, paperWidth, defaultFormat, printerName]);
 
   useEffect(() => {
@@ -185,6 +219,7 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
     setDigitalUrl(receipt?.digitalReceiptUrl || "");
     setExpiresAt(receipt?.digitalReceiptExpiresAt || "");
     setQrError("");
+    setPrintMessage("");
   }, [receipt?.orderNumber, receipt?.digitalReceiptUrl, receipt?.digitalReceiptExpiresAt]);
 
   useEffect(() => {
@@ -396,6 +431,14 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
         )}
 
         {/* Action Controls */}
+        {printMessage && (
+          <p
+            role="status"
+            className={`rounded-xl px-3 py-2 text-xs ${printMessage.startsWith("Print job sent") || printMessage.startsWith("Print dialog opened") ? "bg-emerald-400/10 text-emerald-200" : "bg-rose-400/10 text-rose-200"}`}
+          >
+            {printMessage}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2 pt-2">
           <button
             onClick={onClose}
@@ -405,12 +448,14 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
           </button>
           <div className="flex flex-1 gap-2">
             <button
+              disabled={isPrinting}
               onClick={() => { setPreviewFormat("receipt"); handlePrint("receipt"); }}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-400 py-3 text-xs font-bold text-slate-950 transition hover:bg-sky-300"
             >
-              <Printer className="h-4 w-4" /> Receipt {paperWidth}mm{defaultFormat === "receipt" ? " · Default" : ""}
+              <Printer className="h-4 w-4" /> {isPrinting ? "Printing…" : `Receipt ${paperWidth}mm`}{defaultFormat === "receipt" ? " · Default" : ""}
             </button>
             <button
+              disabled={isPrinting}
               onClick={() => { setPreviewFormat("a4"); handlePrint("a4"); }}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-sky-400/50 bg-slate-800 py-3 text-xs font-bold text-sky-200 transition hover:bg-slate-700"
             >
