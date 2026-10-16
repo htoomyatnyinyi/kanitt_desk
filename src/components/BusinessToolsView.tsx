@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { BadgePercent, Gift, Plus, ReceiptText, RefreshCw, ShieldAlert, Store, Wallet } from "lucide-react";
 import { useCreateCashRegisterMutation, useCreatePromotionMutation, useCreateTaxRateMutation, useCreateWalletTransactionMutation, useGetCashRegistersQuery, useGetGiftCardsQuery, useGetPromotionsQuery, useGetTaxRatesQuery, useGetWalletsQuery, useIssueGiftCardMutation, useReloadGiftCardMutation, useUpdateGiftCardStatusMutation, useUpdatePromotionMutation, useUpdateTaxRateMutation } from "../store/apiSlice";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 type Module = "promotions" | "tax" | "registers" | "giftcards" | "wallets";
 const modules: { id: Module; label: string; caption: string; icon: typeof Store }[] = [
@@ -18,6 +19,7 @@ const errorText = (error: unknown) => { const value = error as { data?: { messag
 export function BusinessToolsView({ storeId }: { storeId?: string }) {
   const [module, setModule] = useState<Module>("promotions");
   const [dialog, setDialog] = useState(false);
+  useSystemBack(dialog, () => setDialog(false), 40);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);

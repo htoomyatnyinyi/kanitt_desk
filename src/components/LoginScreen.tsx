@@ -104,8 +104,8 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       {/* Background gradient glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-sky-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/3 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-150 h-150 bg-sky-500/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 left-1/3 w-[400px] h-100 bg-emerald-500/5 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md">
@@ -266,7 +266,7 @@ export function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             <button
               type="submit"
               disabled={isLoading || isVerifying}
-              className="w-full mt-2 bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full mt-2 bg-linear-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isLoading || isVerifying ? (
                 <>

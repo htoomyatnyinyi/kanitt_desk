@@ -15,6 +15,7 @@ import {
   useGetStockRequestsQuery,
   useUpdateStockRequestMutation,
 } from "../store/apiSlice";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 interface Props {
   storeId?: string;
@@ -54,6 +55,7 @@ export function StockRequestsView({
     useCompleteStockTransferMutation();
 
   const [transferRequest, setTransferRequest] = useState<any>(null);
+  useSystemBack(!!transferRequest, () => setTransferRequest(null), 40);
   const [sourceStoreId, setSourceStoreId] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState("");

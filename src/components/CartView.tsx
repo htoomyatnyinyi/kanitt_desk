@@ -8,6 +8,7 @@ import {
   Receipt,
 } from "lucide-react";
 import { CartItem } from "../types";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 interface CartViewProps {
   cart: CartItem[];
@@ -45,6 +46,7 @@ export function CartView({
   pricingError,
 }: CartViewProps) {
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  useSystemBack(mobileCartOpen, () => setMobileCartOpen(false), 10);
   const cartPanel = (
     <div className="flex h-full w-full flex-col justify-between bg-slate-900 p-4 lg:p-5">
       <div className="min-h-0 flex-1">

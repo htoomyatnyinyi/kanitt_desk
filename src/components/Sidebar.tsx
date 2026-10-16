@@ -40,6 +40,7 @@ import {
   useCloseSessionMutation,
   useGetOrdersQuery,
 } from "../store/apiSlice";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 export type Tab =
   | "dashboard"
@@ -428,30 +429,9 @@ function LogoutConfirmModal({
   onCloseSessionAndLogout,
   onForceLogout,
 }: LogoutConfirmModalProps) {
-  // Esc to close (unless processing)
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isProcessing) {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, isProcessing, onCancel]);
-
-  // Mobile/browser back intercept
-  useEffect(() => {
-    if (!open) return;
-    const marker = { __logoutModal: true, ts: Date.now() };
-    window.history.pushState(marker, "");
-    const onPop = () => {
-      if (!isProcessing) onCancel();
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [open, isProcessing, onCancel]);
+  useSystemBack(open, () => {
+    if (!isProcessing) onCancel();
+  }, 100);
 
   if (!open) return null;
 
@@ -644,6 +624,7 @@ export function Sidebar({
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  useSystemBack(isMobileDrawerOpen, () => setIsMobileDrawerOpen(false), 10);
 
   const currentUser = decodeAuthToken();
   const userRole = (currentUser?.role || "CASHIER").toUpperCase();

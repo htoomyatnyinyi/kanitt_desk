@@ -32,6 +32,7 @@ import {
   useCreateStockRequestMutation,
   useGetStockRequestsQuery,
 } from "../store/apiSlice";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                             */
@@ -395,40 +396,6 @@ const csvCell = (value: unknown) =>
   `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 /* ------------------------------------------------------------------ */
-/*  Mobile Back — history stack guard                                  */
-/* ------------------------------------------------------------------ */
-
-/**
- * Pushes a history state when `active` becomes true.
- * When user presses the browser back button (mobile back), we intercept
- * `popstate` and call `onBack` instead of leaving the page.
- */
-function useMobileBack(active: boolean, onBack: () => void) {
-  const onBackRef = useRef(onBack);
-  onBackRef.current = onBack;
-
-  useEffect(() => {
-    if (!active) return;
-    if (typeof window === "undefined") return;
-
-    // Push a dummy state so pressing back triggers popstate
-    const marker = { __modalGuard: true, ts: Date.now() };
-    window.history.pushState(marker, "");
-
-    const handlePop = () => {
-      // Back pressed → close modal and re-push guard so the next back
-      // press still doesn't leave the page
-      onBackRef.current();
-    };
-    window.addEventListener("popstate", handlePop);
-
-    return () => {
-      window.removeEventListener("popstate", handlePop);
-    };
-  }, [active]);
-}
-
-/* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -549,7 +516,7 @@ export function InventoryView({
     !!purchaseTarget ||
     movementsOpen;
 
-  useMobileBack(anyOverlayOpen, closeTopmost);
+  useSystemBack(anyOverlayOpen, () => { closeTopmost(); }, 20);
 
   /* ---------------------- merged movements --------------------- */
 
@@ -769,7 +736,6 @@ export function InventoryView({
         searchRef.current?.select();
       }
       if (event.key === "Escape") {
-        closeTopmost();
         if (document.activeElement === searchRef.current) {
           searchRef.current?.blur();
         }
@@ -777,7 +743,7 @@ export function InventoryView({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [closeTopmost]);
+  }, []);
 
   /* ---------------------------- render ------------------------- */
 

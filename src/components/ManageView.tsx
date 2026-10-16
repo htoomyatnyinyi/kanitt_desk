@@ -30,6 +30,7 @@ import { Product } from "../types";
 import { apiService, resolveMediaUrl } from "../services/api";
 // import { SearchableProductPicker } from "./SearchableProductPicker";
 import { ChoiceCards } from "./ChoiceCards";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 type Section =
   | "products"
@@ -554,6 +555,7 @@ export function ManageView(props: Props) {
   const [dialog, setDialog] = useState<"create" | "edit" | "stock" | null>(
     null,
   );
+  useSystemBack(!!dialog, () => setDialog(null), 40);
   const [expandedVariant, setExpandedVariant] = useState<number | null>(0);
   const [editing, setEditing] = useState<any>(null);
   const [fields, setFields] = useState<Fields>({ ...emptyProduct });

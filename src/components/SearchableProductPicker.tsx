@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, PackageSearch, Search } from "lucide-react";
 import { Product } from "../types";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 interface Props {
   products: Product[];
@@ -20,6 +21,7 @@ export function SearchableProductPicker({
 }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  useSystemBack(open, () => setOpen(false), 65);
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

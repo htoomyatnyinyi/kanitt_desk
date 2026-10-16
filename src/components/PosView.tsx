@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Search, Plus, Barcode, X, Layers, ImageOff } from "lucide-react";
 import { Product } from "../types";
 import { resolveMediaUrl } from "../services/api";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 /* ------------------------------------------------------------------ */
 /*  Variant helpers                                                    */
@@ -199,15 +200,7 @@ export function PosView({
     setVariantQuery("");
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
-
-  useEffect(() => {
-    if (!variantPicker) return;
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closePicker();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [variantPicker, closePicker]);
+  useSystemBack(!!variantPicker, closePicker, 60);
 
   /* --------------------------- add-to-cart ---------------------- */
 

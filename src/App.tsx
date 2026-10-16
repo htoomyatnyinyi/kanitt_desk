@@ -85,6 +85,7 @@ import {
   updateQueuedSaleError,
   type QueuedSale,
 } from "./services/offlineSalesQueue";
+import { useSystemBack } from "./hooks/SystemBackProvider";
 
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
 function PosShell({ onLogout }: { onLogout: () => void }) {
@@ -141,6 +142,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [currentReceipt, setCurrentReceipt] = useState<ReceiptData | null>(
     null,
   );
+  useSystemBack(paymentModalOpen, () => setPaymentModalOpen(false), 40);
+  useSystemBack(!!currentReceipt, () => setCurrentReceipt(null), 50);
 
   // RTK Query — live data from kanitt_server
   const {
@@ -250,14 +253,6 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         ) {
           setPaymentModalOpen(true);
         }
-      } else if (e.key === "Escape") {
-        if (paymentModalOpen) {
-          e.preventDefault();
-          setPaymentModalOpen(false);
-        } else if (currentReceipt) {
-          e.preventDefault();
-          setCurrentReceipt(null);
-        }
       }
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
@@ -267,8 +262,6 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     cart.length,
     isPricingLoading,
     pricingError,
-    paymentModalOpen,
-    currentReceipt,
   ]);
   const [createCatalogProduct] = useCreateCatalogProductMutation();
   const [updateCatalogProduct] = useUpdateCatalogProductMutation();

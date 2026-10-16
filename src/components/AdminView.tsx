@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 import {
   Bell,
   BellOff,
@@ -326,6 +327,7 @@ function StoreSettingsPanel({
   const [upsert, { isLoading: upserting }] = useUpsertStoreSettingMutation();
   const [del] = useDeleteStoreSettingMutation();
   const [dialog, setDialog] = useState(false);
+  useSystemBack(dialog, () => setDialog(false), 45);
   const [form, setForm] = useState({
     settingKey: "",
     settingValue: "",
@@ -526,6 +528,7 @@ function ApiKeysPanel({ currentUserId }: { currentUserId?: string }) {
   const [create, { isLoading: creating }] = useCreateApiKeyMutation();
   const [revoke] = useRevokeApiKeyMutation();
   const [dialog, setDialog] = useState(false);
+  useSystemBack(dialog, () => setDialog(false), 45);
   const [form, setForm] = useState({ name: "", expiresAt: "" });
   const [permissions, setPermissions] = useState<string[]>(["READ"]);
   const [newSecret, setNewSecret] = useState<{

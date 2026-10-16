@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { ApiOrder } from "../store/apiSlice";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 import { Product } from "../types";
 import { WorkflowGuide } from "./WorkflowGuide";
 import { ChoiceCards } from "./ChoiceCards";
@@ -2562,26 +2563,16 @@ function Modal({
   maxWidth?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+  useSystemBack(open, onClose, 30);
 
   useEffect(() => {
     if (!open) return;
-
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCloseRef.current();
-    };
-    document.addEventListener("keydown", handleKey);
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     panelRef.current?.focus();
 
     return () => {
-      document.removeEventListener("keydown", handleKey);
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);

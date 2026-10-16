@@ -15,6 +15,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { ApiOrder, Session } from "../store/apiSlice";
+import { useSystemBack } from "../hooks/SystemBackProvider";
 
 interface SessionsViewProps {
   sessions?: Session[];
@@ -565,6 +566,7 @@ export function SessionsView({
   onXReportGenerated,
 }: SessionsViewProps) {
   const [dialog, setDialog] = useState<"open" | "close" | null>(null);
+  useSystemBack(!!dialog, () => setDialog(null), 40);
   const [sessionId, setSessionId] = useState("");
   const [balance, setBalance] = useState("");
   const [busy, setBusy] = useState(false);
