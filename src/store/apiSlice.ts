@@ -1027,6 +1027,15 @@ export const kanittApi = createApi({
     issueOfflineLicense: builder.mutation<any, { storeId: string; deviceId: string }>({
       query: (body) => ({ url: "/tenant/subscription/offline-license", method: "POST", body }),
     }),
+    reportDeviceHeartbeat: builder.mutation<any, {
+      deviceId: string;
+      storeId?: string;
+      name?: string;
+      platform?: string;
+      appVersion?: string;
+    }>({
+      query: (body) => ({ url: "/tenant/devices/heartbeat", method: "POST", body }),
+    }),
     revokeOfflineLicense: builder.mutation<any, string>({
       query: (id) => ({ url: `/tenant/subscription/offline-license/${id}/revoke`, method: "POST" }),
       invalidatesTags: ["Subscription"],
@@ -1157,6 +1166,7 @@ export const {
   useGetSubscriptionQuery,
   useRequestSubscriptionMutation,
   useIssueOfflineLicenseMutation,
+  useReportDeviceHeartbeatMutation,
   useRevokeOfflineLicenseMutation,
   useGetNotificationsQuery,
   useGetNotificationUnreadCountQuery,

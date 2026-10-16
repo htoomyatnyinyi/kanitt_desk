@@ -11,6 +11,7 @@ import {
   useCompleteOrderMutation,
   useCreateDigitalReceiptLinkMutation,
   useIssueOfflineLicenseMutation,
+  useReportDeviceHeartbeatMutation,
   useGetOrdersQuery,
   useGetStoreSettingsQuery,
   useGetCategoriesQuery,
@@ -231,6 +232,35 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     useCompleteOrderMutation();
   const [createDigitalReceiptLinkApi] = useCreateDigitalReceiptLinkMutation();
   const [issueOfflineLicense] = useIssueOfflineLicenseMutation();
+  const [reportDeviceHeartbeat] = useReportDeviceHeartbeatMutation();
+
+  useEffect(() => {
+    let deviceId: string;
+    try {
+      deviceId = getOfflineDeviceId();
+    } catch {
+      return;
+    }
+    const report = () => {
+      if (document.visibilityState === "hidden" || !navigator.onLine) return;
+      void reportDeviceHeartbeat({
+        deviceId,
+        storeId: selectedStore?.id,
+        name: `Kanitt Win · ${navigator.platform || "Desktop"}`,
+        platform: navigator.userAgent.slice(0, 80),
+        appVersion: import.meta.env.VITE_APP_VERSION || "0.1.0",
+      }).unwrap().catch(() => {});
+    };
+    report();
+    const timer = window.setInterval(report, 60_000);
+    document.addEventListener("visibilitychange", report);
+    window.addEventListener("online", report);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", report);
+      window.removeEventListener("online", report);
+    };
+  }, [reportDeviceHeartbeat, selectedStore?.id]);
 
   // Global Keyboard Shortcuts (F1: Search, F2: Checkout, Esc: Cancel Modals)
   useEffect(() => {
