@@ -417,49 +417,87 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
         </div>
 
         {receipt.orderId && (
-          <section className="mb-3 flex items-center gap-3 rounded-2xl border border-sky-400/20 bg-sky-400/5 p-3">
-            {qrDataUrl ? <img src={qrDataUrl} alt="Digital receipt QR code" className="h-24 w-24 rounded-lg bg-white p-1" /> : <QrCode className="h-12 w-12 shrink-0 text-sky-300" />}
+          <section className="mb-3 flex items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/5 p-3.5 backdrop-blur-sm">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="Digital receipt QR code" className="h-20 w-20 shrink-0 rounded-xl bg-white p-1.5 shadow" />
+            ) : (
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-sky-400">
+                <QrCode className="h-10 w-10" />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="font-bold text-white">Digital receipt</p>
-              <p className="mt-1 text-xs text-slate-400">Customer can scan this QR to open the receipt and save it as PDF.</p>
-              {remainingSeconds > 0 ? <p className="mt-1 text-xs text-amber-300">QR expires in {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}</p> : <p className="mt-1 text-xs text-rose-300">{digitalUrl ? "QR expired. Show a fresh code." : "Create a QR code for this receipt."}</p>}
-              {qrError && <p className="mt-1 text-xs text-rose-300">{qrError}</p>}
-              {remainingSeconds === 0 && <button onClick={() => void refreshDigitalReceipt()} disabled={refreshingQr || !onRefreshDigitalReceipt} className="mt-2 inline-flex items-center gap-1 rounded-lg bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshingQr ? "animate-spin" : ""}`} />{refreshingQr ? "Refreshing…" : "Show QR again"}</button>}
-              {digitalUrl && <button onClick={() => void navigator.clipboard?.writeText(digitalUrl)} className="ml-2 mt-2 text-xs font-semibold text-sky-300">Copy link</button>}
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-white">Digital E-Receipt</p>
+                {remainingSeconds > 0 && (
+                  <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                    {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-[11px] text-slate-400 leading-tight">Customer can scan to view or download PDF receipt on mobile.</p>
+              {remainingSeconds === 0 ? (
+                <button
+                  onClick={() => void refreshDigitalReceipt()}
+                  disabled={refreshingQr || !onRefreshDigitalReceipt}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-sky-400 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-sky-300 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3 w-3 ${refreshingQr ? "animate-spin" : ""}`} />
+                  {refreshingQr ? "Refreshing…" : "Show QR code"}
+                </button>
+              ) : (
+                digitalUrl && (
+                  <button
+                    onClick={() => void navigator.clipboard?.writeText(digitalUrl)}
+                    className="mt-2 text-xs font-bold text-sky-400 hover:text-sky-300 transition-colors"
+                  >
+                    Copy Link ↗
+                  </button>
+                )
+              )}
+              {qrError && <p className="mt-1 text-[11px] text-rose-300">{qrError}</p>}
             </div>
           </section>
         )}
 
-        {/* Action Controls */}
+        {/* Print Feedback Notification */}
         {printMessage && (
-          <p
+          <div
             role="status"
-            className={`rounded-xl px-3 py-2 text-xs ${printMessage.startsWith("Print job sent") || printMessage.startsWith("Print dialog opened") ? "bg-emerald-400/10 text-emerald-200" : "bg-rose-400/10 text-rose-200"}`}
+            className={`mb-3 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold ${
+              printMessage.startsWith("Print job sent") || printMessage.startsWith("Print dialog opened")
+                ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                : "border border-rose-500/30 bg-rose-500/10 text-rose-300"
+            }`}
           >
-            {printMessage}
-          </p>
+            <Printer className="h-4 w-4 shrink-0" />
+            <span>{printMessage}</span>
+          </div>
         )}
-        <div className="flex flex-wrap items-center gap-2 pt-2">
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
           <button
             onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-3 text-xs font-bold text-slate-300 transition hover:bg-slate-700 hover:text-white"
+            className="rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-xs font-bold text-slate-300 transition hover:bg-slate-700 hover:text-white"
           >
-            Close
+            Close (Esc)
           </button>
           <div className="flex flex-1 gap-2">
             <button
               disabled={isPrinting}
               onClick={() => { setPreviewFormat("receipt"); handlePrint("receipt"); }}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-400 py-3 text-xs font-bold text-slate-950 transition hover:bg-sky-300"
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 py-3 text-xs font-black text-slate-950 transition shadow-lg shadow-sky-500/20 active:scale-95 disabled:opacity-50"
             >
-              <Printer className="h-4 w-4" /> {isPrinting ? "Printing…" : `Receipt ${paperWidth}mm`}{defaultFormat === "receipt" ? " · Default" : ""}
+              <Printer className="h-4 w-4 stroke-[2.5]" />
+              <span>{isPrinting ? "Printing…" : `Print Receipt (${paperWidth}mm)`}</span>
             </button>
             <button
               disabled={isPrinting}
               onClick={() => { setPreviewFormat("a4"); handlePrint("a4"); }}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-sky-400/50 bg-slate-800 py-3 text-xs font-bold text-sky-200 transition hover:bg-slate-700"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white disabled:opacity-50"
+              title="Print standard A4 format"
             >
-              <Printer className="h-4 w-4" /> A4 page{defaultFormat === "a4" ? " · Default" : ""}
+              A4
             </button>
           </div>
         </div>

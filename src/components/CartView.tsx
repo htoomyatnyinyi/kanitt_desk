@@ -26,6 +26,8 @@ interface CartViewProps {
   applyPromotion: () => void;
   pricingLoading: boolean;
   pricingError: string | null;
+  mobileCartOpen?: boolean;
+  setMobileCartOpen?: (open: boolean) => void;
 }
 
 export function CartView({
@@ -44,84 +46,116 @@ export function CartView({
   applyPromotion,
   pricingLoading,
   pricingError,
+  mobileCartOpen: controlledMobileOpen,
+  setMobileCartOpen: controlledSetMobileOpen,
 }: CartViewProps) {
-  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [internalMobileOpen, setInternalMobileOpen] = useState(false);
+  const mobileCartOpen = controlledMobileOpen ?? internalMobileOpen;
+  const setMobileCartOpen = controlledSetMobileOpen ?? setInternalMobileOpen;
+
   useSystemBack(mobileCartOpen, () => setMobileCartOpen(false), 10);
   const cartPanel = (
-    <div className="flex h-full w-full flex-col justify-between bg-slate-900 p-4 lg:p-5">
-      <div className="min-h-0 flex-1">
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-sky-400" />
-            <h2 className="font-bold text-slate-100 text-lg">Current Order</h2>
+    <div className="flex h-full w-full flex-col justify-between bg-slate-900/95 backdrop-blur-xl p-4 lg:p-5 border-l border-slate-800/80 shadow-2xl">
+      <div className="flex min-h-0 flex-1 flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3.5 mb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              <Receipt className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-100 text-sm tracking-wide">Current Order</h2>
+              <p className="text-[10px] font-semibold text-slate-400">
+                {cart.length} {cart.length === 1 ? "line item" : "line items"}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {mobileCartOpen && (
               <button
                 type="button"
                 onClick={() => setMobileCartOpen(false)}
-                className="text-xs font-semibold text-slate-300 lg:hidden"
+                className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:text-white lg:hidden"
               >
                 Close
               </button>
             )}
-            <button
-              onClick={() => setCart([])}
-              disabled={cart.length === 0}
-              className="text-xs text-slate-400 hover:text-rose-400 disabled:opacity-30 transition-colors"
-            >
-              Clear Cart
-            </button>
+            {cart.length > 0 && (
+              <button
+                onClick={() => setCart([])}
+                className="rounded-lg px-2 py-1 text-[11px] font-bold text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+                title="Clear all items in cart"
+              >
+                Clear Cart
+              </button>
+            )}
           </div>
         </div>
 
         {/* Cart Item List */}
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
           {cart.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 space-y-2">
-              <ShoppingBagIcon className="w-12 h-12 mx-auto opacity-20" />
-              <p className="text-sm font-medium">Cart is empty</p>
-              <p className="text-xs opacity-70">
-                Scan barcode or tap items to add
-              </p>
+            <div className="flex h-full flex-col items-center justify-center py-12 text-center text-slate-500 space-y-3">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800/40 border border-slate-700/30 text-slate-600">
+                <ShoppingBagIcon className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-slate-300">Cart is empty</p>
+                <p className="text-xs text-slate-500 max-w-[200px]">
+                  Click products from the grid or scan a barcode to add.
+                </p>
+              </div>
             </div>
           ) : (
             cart.map((item) => (
               <div
                 key={item.id}
-                className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-3 flex items-center justify-between"
+                className="group relative bg-slate-950/80 hover:bg-slate-950 border border-slate-800/70 hover:border-slate-700 rounded-xl p-3 flex items-center justify-between gap-2.5 transition-all shadow-sm"
               >
-                <div className="flex-1 min-w-0 pr-2">
-                  <h4 className="font-semibold text-xs text-slate-200 truncate">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-xs text-slate-100 truncate group-hover:text-sky-300 transition-colors">
                     {item.name}
                   </h4>
-                  <p className="text-[11px] text-sky-400 font-bold mt-0.5">
-                    {item.price.toLocaleString()} MMK
-                  </p>
+                  <div className="mt-1 flex items-center gap-2 text-[11px]">
+                    <span className="font-extrabold text-sky-400">
+                      {(item.price * item.quantity).toLocaleString()}{" "}
+                      <span className="text-[9px] font-normal text-slate-400">MMK</span>
+                    </span>
+                    {item.quantity > 1 && (
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        ({item.price.toLocaleString()} × {item.quantity})
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+
+                {/* Quantity Controls */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg p-0.5 shadow-inner">
                     <button
                       onClick={() => updateQuantity(item.id, -1)}
-                      className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
+                      className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      aria-label="Decrease quantity"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-6 text-center text-xs font-bold text-white">
+                    <span className="w-7 text-center text-xs font-black text-white">
                       {item.quantity}
                     </span>
                     <button
                       onClick={() => updateQuantity(item.id, 1)}
-                      className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white"
+                      className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      aria-label="Increase quantity"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
                   <button
                     onClick={() => removeFromCart(item.id)}
-                    className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-500/15 hover:text-rose-400 transition-colors"
+                    title="Remove item"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -131,32 +165,35 @@ export function CartView({
       </div>
 
       {/* Checkout Calculation Footer */}
-      <div className="shrink-0 pt-4 border-t border-slate-800 space-y-3 bg-slate-900">
+      <div className="shrink-0 pt-3.5 border-t border-slate-800 space-y-3 bg-slate-900/90">
         <div className="space-y-1.5 text-xs">
-          <div className="flex justify-between text-slate-400">
+          <div className="flex justify-between text-slate-400 font-medium">
             <span>Subtotal</span>
             <span className="font-semibold text-slate-200">
               {subtotal.toLocaleString()} MMK
             </span>
           </div>
           {discount > 0 && (
-            <div className="flex justify-between text-emerald-300">
-              <span>Promotion {promotionCode ? `· ${promotionCode}` : ""}</span>
-              <span className="font-semibold">
+            <div className="flex justify-between text-emerald-400 font-medium">
+              <span>Promotion {promotionCode ? `(${promotionCode})` : ""}</span>
+              <span className="font-bold">
                 −{discount.toLocaleString()} MMK
               </span>
             </div>
           )}
-          <div className="flex justify-between text-slate-400">
-            <span>Configured tax</span>
-            <span className="font-semibold text-slate-200">
-              {tax.toLocaleString()} MMK
-            </span>
-          </div>
+          {tax > 0 && (
+            <div className="flex justify-between text-slate-400 font-medium">
+              <span>Tax</span>
+              <span className="font-semibold text-slate-200">
+                {tax.toLocaleString()} MMK
+              </span>
+            </div>
+          )}
 
-          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5">
+          {/* Promotion Code Input */}
+          <div className="rounded-xl border border-slate-800/90 bg-slate-950/80 p-2 focus-within:border-violet-500/60 transition-colors">
             <div className="flex items-center gap-2">
-              <BadgePercent className="h-4 w-4 shrink-0 text-violet-300" />
+              <BadgePercent className="h-4 w-4 shrink-0 text-violet-400" />
               <input
                 value={promotionInput}
                 onChange={(event) => setPromotionInput(event.target.value)}
@@ -166,13 +203,13 @@ export function CartView({
                     applyPromotion();
                   }
                 }}
-                placeholder="Promotion code"
-                className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-600"
+                placeholder="Promo code (optional)"
+                className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-slate-500"
               />
               <button
                 onClick={applyPromotion}
                 disabled={pricingLoading || cart.length === 0}
-                className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-[10px] font-bold text-slate-300 hover:border-violet-300/40 hover:text-white disabled:opacity-40"
+                className="rounded-lg bg-slate-800 hover:bg-violet-600 px-2.5 py-1 text-[10px] font-bold text-slate-200 hover:text-white disabled:opacity-40 transition-colors"
               >
                 {pricingLoading
                   ? "Checking…"
@@ -182,32 +219,46 @@ export function CartView({
               </button>
             </div>
             {pricingError ? (
-              <p className="mt-2 text-[10px] leading-4 text-rose-300">
+              <p className="mt-1.5 text-[10px] leading-4 text-rose-300 font-medium">
                 {pricingError}
               </p>
             ) : promotionCode ? (
-              <p className="mt-2 text-[10px] text-emerald-300">
-                {promotionCode} will be revalidated at checkout.
+              <p className="mt-1.5 text-[10px] text-emerald-400 font-medium">
+                {promotionCode} applied successfully.
               </p>
             ) : null}
           </div>
-          <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800/80">
-            <span>Total Payable</span>
-            <span className="text-sky-400 font-black text-lg">
-              {total.toLocaleString()} MMK
-            </span>
+
+          {/* Total Payable */}
+          <div className="flex items-baseline justify-between pt-2.5 border-t border-slate-800">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                Total Payable
+              </span>
+              <span className="text-[10px] text-slate-500">Shortcut: Press [F2]</span>
+            </div>
+            <div className="text-right">
+              <span className="text-xl font-black text-sky-400 tracking-tight">
+                {total.toLocaleString()}
+              </span>
+              <span className="text-xs font-semibold text-slate-400 ml-1">MMK</span>
+            </div>
           </div>
         </div>
 
+        {/* Checkout Button */}
         <button
           disabled={
             cart.length === 0 || pricingLoading || Boolean(pricingError)
           }
-          onClick={() => setPaymentModalOpen(true)}
-          className="w-full bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all active:scale-98"
+          onClick={() => {
+            setMobileCartOpen(false);
+            setPaymentModalOpen(true);
+          }}
+          className="w-full bg-gradient-to-r from-sky-500 to-emerald-500 hover:from-sky-400 hover:to-emerald-400 text-slate-950 font-black py-3.5 rounded-xl shadow-lg shadow-sky-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] text-sm tracking-wide"
         >
-          <CreditCard className="w-5 h-5" />
-          <span>Pay Now ({total.toLocaleString()} MMK)</span>
+          <CreditCard className="w-5 h-5 text-slate-950 stroke-[2.5]" />
+          <span>Proceed to Checkout</span>
         </button>
       </div>
     </div>

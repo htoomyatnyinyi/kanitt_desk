@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { Search, Plus, Barcode, X, Layers, ImageOff } from "lucide-react";
+import { Search, Plus, Barcode, X, Layers, ImageOff, CheckCircle2 } from "lucide-react";
 import { Product } from "../types";
 import { resolveMediaUrl } from "../services/api";
 import { useSystemBack } from "../hooks/SystemBackProvider";
@@ -154,6 +154,25 @@ export function PosView({
   const [variantPicker, setVariantPicker] = useState<Product | null>(null);
   const [variantQuery, setVariantQuery] = useState("");
 
+  // Toast feedback when item is added to cart
+  const [lastAddedToast, setLastAddedToast] = useState<{
+    name: string;
+    price: number;
+    timestamp: number;
+  } | null>(null);
+
+  const showAddedToast = useCallback((name: string, price: number) => {
+    setLastAddedToast({ name, price, timestamp: Date.now() });
+  }, []);
+
+  useEffect(() => {
+    if (!lastAddedToast) return;
+    const timer = setTimeout(() => {
+      setLastAddedToast(null);
+    }, 2400);
+    return () => clearTimeout(timer);
+  }, [lastAddedToast?.timestamp]);
+
   /* --------------------------- focus / paging ------------------- */
 
   useEffect(() => {
@@ -212,20 +231,28 @@ export function PosView({
         if (Number(variants[0].availableStock ?? variants[0].stock ?? 0) <= 0)
           return;
         addToCart(product, variants[0]);
+        showAddedToast(
+          `${product.name} ${variants[0].name ? `(${variants[0].name})` : ""}`,
+          Number(variants[0].price ?? product.price ?? 0),
+        );
         return;
       }
       setVariantPicker(product);
       setVariantQuery("");
     },
-    [addToCart],
+    [addToCart, showAddedToast],
   );
 
   const pickVariant = useCallback(
     (product: Product, variant: Variant) => {
       addToCart(product, variant);
+      showAddedToast(
+        `${product.name} (${variant.name})`,
+        Number(variant.price ?? product.price ?? 0),
+      );
       closePicker();
     },
-    [addToCart, closePicker],
+    [addToCart, closePicker, showAddedToast],
   );
 
   /* --------------------------- scanner -------------------------- */
@@ -257,6 +284,10 @@ export function PosView({
       if (variantHit) {
         if (Number(variantHit.availableStock ?? variantHit.stock ?? 0) > 0) {
           addToCart(product, variantHit);
+          showAddedToast(
+            `${product.name} (${variantHit.name})`,
+            Number(variantHit.price ?? product.price ?? 0),
+          );
         }
         setSearchQuery("");
         return;
@@ -267,7 +298,31 @@ export function PosView({
   /* ----------------------------- render ------------------------- */
 
   return (
-    <div className="flex min-w-0 flex-none flex-col overflow-visible p-4 pb-24 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-6">
+    <div className="relative flex min-w-0 flex-none flex-col overflow-visible p-4 pb-24 lg:flex-1 lg:overflow-y-auto lg:p-6 lg:pb-6">
+      {/* Real-time Added-to-Cart Toast */}
+      {lastAddedToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-5 right-5 z-50 flex items-center gap-3 rounded-2xl border border-emerald-500/40 bg-slate-900/95 px-4 py-3 text-white shadow-2xl shadow-emerald-500/20 backdrop-blur-xl animate-in fade-in slide-in-from-top-3 duration-200"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+            <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
+          </div>
+          <div className="min-w-0 pr-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+              Added to Cart
+            </p>
+            <p className="max-w-[220px] truncate text-xs font-bold text-slate-100">
+              {lastAddedToast.name}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs font-black text-sky-400">
+            {lastAddedToast.price.toLocaleString()} MMK
+          </span>
+        </div>
+      )}
+
       {/* Top bar */}
       <div className="mb-4 flex flex-col items-center justify-between gap-4 sm:flex-row">
         <div className="relative w-full sm:w-80 md:w-96">
@@ -324,10 +379,14 @@ export function PosView({
       </div>
 
       {/* Product grid */}
-      <div className="grid flex-1 content-start grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3.5 lg:gap-4">
+      <div className="grid flex-1 content-start grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 lg:gap-3.5">
         {paginatedProducts.map((product) => {
           const variants = getVariants(product);
           const variantCount = variants.length;
+          const totalStock = variants.reduce(
+            (sum, v) => sum + (Number(v.availableStock ?? v.stock ?? 0)),
+            0,
+          );
           const isOutOfStock =
             variantCount > 0 &&
             variants.every(
@@ -341,74 +400,74 @@ export function PosView({
               type="button"
               disabled={disabled}
               onClick={() => !disabled && handleProductClick(product)}
-              className={`group flex flex-col overflow-hidden rounded-2xl border bg-slate-900/70 text-left transition-all duration-200 ${
-                variantCount === 0
-                  ? "cursor-not-allowed border-slate-800/80 opacity-50"
-                  : isOutOfStock
-                    ? "cursor-not-allowed border-slate-800/80 opacity-60"
-                    : "cursor-pointer border-slate-800/80 hover:border-sky-500/50 hover:bg-slate-900 hover:shadow-xl hover:shadow-sky-500/5 active:scale-[0.98]"
+              className={`group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-all duration-200 active:scale-[0.98] ${
+                disabled
+                  ? "cursor-not-allowed border-slate-800/60 bg-slate-900/40 opacity-50"
+                  : "cursor-pointer border-slate-800/80 bg-slate-900/80 hover:border-sky-500/50 hover:bg-slate-900 hover:shadow-xl hover:shadow-sky-500/10 focus:outline-none focus:ring-2 focus:ring-sky-400/40"
               }`}
             >
               {/* Image / fallback */}
-              <ProductThumb product={product} className="aspect-4/3 w-full" />
+              <div className="relative overflow-hidden">
+                <ProductThumb product={product} className="aspect-[4/3] w-full transition-transform duration-300 group-hover:scale-105" />
+                {variantCount > 1 && (
+                  <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-slate-950/80 px-2 py-0.5 text-[10px] font-bold text-violet-300 backdrop-blur-md border border-violet-500/30">
+                    <Layers className="h-3 w-3" />
+                    {variantCount} options
+                  </span>
+                )}
+                {isOutOfStock ? (
+                  <span className="absolute top-2 right-2 rounded-md bg-rose-500/90 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                    Out of stock
+                  </span>
+                ) : (
+                  <span
+                    className={`absolute top-2 right-2 rounded-md px-1.5 py-0.5 text-[9px] font-bold backdrop-blur-md ${
+                      totalStock <= 5
+                        ? "bg-amber-500/85 text-white"
+                        : "bg-slate-950/70 text-slate-300 border border-slate-700/50"
+                    }`}
+                  >
+                    {totalStock} in stock
+                  </span>
+                )}
+              </div>
 
               {/* Body */}
-              <div className="flex flex-1 flex-col p-3.5">
-                {/* Chips row */}
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <span className="max-w-[60%] truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-400">
-                    {product.category || "Uncategorised"}
+              <div className="flex flex-1 flex-col p-3">
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span className="truncate rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400">
+                    {product.category || "General"}
                   </span>
-
-                  {isOutOfStock ? (
-                    <span className="shrink-0 rounded-full border border-rose-500/30 bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">
-                      Out of stock
-                    </span>
-                  ) : variantCount > 0 ? (
-                    <span className="flex shrink-0 items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[10px] font-bold text-violet-300">
-                      <Layers className="h-3 w-3" />
-                      {variantCount}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-[10px] font-medium text-slate-500">
-                      No options
-                    </span>
-                  )}
                 </div>
 
                 {/* Name */}
-                <h3 className="mb-1 line-clamp-2 text-sm font-bold text-slate-100 transition-colors group-hover:text-sky-300">
+                <h3 className="line-clamp-2 text-xs font-bold leading-snug text-slate-100 transition-colors group-hover:text-sky-300">
                   {product.name || "Unnamed Product"}
                 </h3>
 
                 {/* SKU */}
-                <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
-                  <span className="truncate">SKU: {product.sku || "—"}</span>
-                </div>
+                <span className="mt-1 font-mono text-[10px] text-slate-500 truncate">
+                  {product.sku ? `SKU: ${product.sku}` : (product.barcode ? `BC: ${product.barcode}` : "—")}
+                </span>
 
-                {variantCount > 0 && (
-                  <p className="mt-1 text-[10px] font-medium text-slate-500">
-                    {variantCount} sellable option
-                    {variantCount === 1 ? "" : "s"}
-                  </p>
-                )}
+                {/* Spacer */}
+                <div className="flex-1 min-h-[8px]" />
 
-                {/* Spacer to push footer down */}
-                <div className="flex-1" />
-
-                {/* Footer: price + add */}
-                <div className="mt-3 flex items-center justify-between border-t border-slate-800/50 pt-3">
-                  <span className="text-base font-black text-white">
-                    {(Number(product.price) || 0).toLocaleString()}{" "}
-                    <span className="text-xs font-normal text-slate-400">
+                {/* Footer: Price + Quick add button */}
+                <div className="mt-2.5 flex items-center justify-between border-t border-slate-800/70 pt-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-black text-white sm:text-sm">
+                      {(Number(product.price) || 0).toLocaleString()}
+                    </span>
+                    <span className="text-[9px] font-semibold text-slate-400">
                       MMK
                     </span>
-                  </span>
+                  </div>
                   <span
                     aria-hidden
-                    className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-800 text-slate-300 transition-all group-hover:bg-sky-500 group-hover:text-white"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/15 text-sky-400 transition-all group-hover:bg-sky-500 group-hover:text-slate-950 group-hover:shadow-md group-hover:shadow-sky-500/30"
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-4 w-4 stroke-[2.5]" />
                   </span>
                 </div>
               </div>

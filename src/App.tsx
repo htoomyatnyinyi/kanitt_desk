@@ -123,6 +123,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentMethod] = useState<"cash" | "kpay" | "wave" | "card">("cash"); // remove setPayment Methods
   const [receivedAmount, setReceivedAmount] = useState("");
@@ -785,6 +786,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     };
     setCurrentReceipt(completedReceiptData);
     setCart([]);
+    setMobileCartOpen(false);
     setPromotionCode("");
     setPromotionInput("");
     setOrderPricing(null);
@@ -1011,6 +1013,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
                 !pricingError)
             }
             pricingError={pricingError}
+            mobileCartOpen={mobileCartOpen}
+            setMobileCartOpen={setMobileCartOpen}
           />
         </>
       )}

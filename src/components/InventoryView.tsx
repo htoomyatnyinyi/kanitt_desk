@@ -462,7 +462,8 @@ export function InventoryView({
     useCreateStockRequestMutation();
 
   const canCreateRequests = ["CASHIER", "MANAGER"].includes(userRole);
-  const canManageStock = ["ADMIN", "SUPER_ADMIN"].includes(userRole) ||
+  const canManageStock =
+    ["ADMIN", "SUPER_ADMIN"].includes(userRole) ||
     (userRole === "MANAGER" && userPermissions.includes("MANAGE_INVENTORY"));
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -516,14 +517,22 @@ export function InventoryView({
     !!purchaseTarget ||
     movementsOpen;
 
-  useSystemBack(anyOverlayOpen, () => { closeTopmost(); }, 20);
+  useSystemBack(
+    anyOverlayOpen,
+    () => {
+      closeTopmost();
+    },
+    20,
+  );
 
   /* ---------------------- merged movements --------------------- */
 
   const allMovements = useMemo(
-    () => [...externalMovements].sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    ),
+    () =>
+      [...externalMovements].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      ),
     [externalMovements],
   );
 
@@ -905,7 +914,7 @@ export function InventoryView({
       </div>
 
       {/* Quick filter chips */}
-      <div className="mb-4 flex flex-nowrap gap-2 overflow-x-auto pb-2 md:flex-wrap md:pb-0">
+      <div className="mb-4 flex flex-nowrap gap-2 overflow-x-auto pb-2 md:flex-wrap md:pb-0 ">
         {chips.map((chip) => {
           const active = stockFilter === chip.id;
           return (
@@ -1147,7 +1156,7 @@ export function InventoryView({
       </div>
 
       {/* ================= MOBILE CARDS ================= */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-3 ">
         {isLoading ? (
           <p className="p-10 text-center text-sm text-slate-400">
             Loading products…
@@ -1288,7 +1297,7 @@ export function InventoryView({
 
       {/* Pagination */}
       {totalItems > 0 && (
-        <div className="mt-4 flex flex-col items-center justify-between gap-3 px-2 md:flex-row md:gap-4">
+        <div className="mt-4 flex flex-col items-center justify-between gap-3 px-2 md:flex-row md:gap-4 mb-20">
           <p className="text-center text-xs text-slate-400 md:text-left">
             Showing{" "}
             <strong className="text-white">{startItem.toLocaleString()}</strong>{" "}
@@ -1372,8 +1381,15 @@ export function InventoryView({
           onDispose={(p, lot, mode) => {
             void (async () => {
               try {
-                if (!onDisposeStock || !p.productId || !p.variantId || !lot.lotId) {
-                  throw new Error("This batch cannot be adjusted because its inventory link is missing.");
+                if (
+                  !onDisposeStock ||
+                  !p.productId ||
+                  !p.variantId ||
+                  !lot.lotId
+                ) {
+                  throw new Error(
+                    "This batch cannot be adjusted because its inventory link is missing.",
+                  );
                 }
                 await onDisposeStock({
                   productId: p.productId,
@@ -1381,12 +1397,17 @@ export function InventoryView({
                   lotId: lot.lotId,
                   quantityIsBaseUnit: true,
                   quantity: -lot.quantity,
-                  reason: mode === "DISPOSE" ? "expired_disposal" : "quarantine",
+                  reason:
+                    mode === "DISPOSE" ? "expired_disposal" : "quarantine",
                   notes: `Lot ${lot.number}${lot.expiryDate ? ` · expiry ${lot.expiryDate}` : ""}`,
                 });
                 setSelected(null);
               } catch (error: any) {
-                window.alert(error?.data?.message || error?.message || "Could not update this batch.");
+                window.alert(
+                  error?.data?.message ||
+                    error?.message ||
+                    "Could not update this batch.",
+                );
               }
             })();
           }}
@@ -1438,7 +1459,10 @@ export function InventoryView({
           onClose={() => setAdjustTarget(null)}
           onSubmit={async (payload) => {
             try {
-              if (!onAdjustStock) throw new Error("Stock adjustment is unavailable for this account.");
+              if (!onAdjustStock)
+                throw new Error(
+                  "Stock adjustment is unavailable for this account.",
+                );
               await onAdjustStock(payload);
               setAdjustTarget(null);
             } catch (error: any) {
@@ -1457,7 +1481,10 @@ export function InventoryView({
           onClose={() => setTransferTarget(null)}
           onSubmit={async (payload) => {
             try {
-              if (!onTransferStock) throw new Error("Stock transfer is unavailable for this account.");
+              if (!onTransferStock)
+                throw new Error(
+                  "Stock transfer is unavailable for this account.",
+                );
               await onTransferStock(payload);
               setTransferTarget(null);
             } catch (error: any) {
@@ -1478,7 +1505,10 @@ export function InventoryView({
           onClose={() => setPurchaseTarget(null)}
           onSubmit={async (po) => {
             try {
-              if (!onCreatePurchaseOrder) throw new Error("Purchase orders are unavailable for this account.");
+              if (!onCreatePurchaseOrder)
+                throw new Error(
+                  "Purchase orders are unavailable for this account.",
+                );
               await onCreatePurchaseOrder(po);
               setPurchaseTarget(null);
             } catch (error: any) {

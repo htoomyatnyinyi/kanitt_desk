@@ -124,7 +124,22 @@ const groups: {
   }[];
 }[] = [
   {
-    name: "Workspace",
+    name: "Point of Sale",
+    items: [
+      { id: "pos", label: "Point of sale", icon: ShoppingBag },
+      { id: "sessions", label: "Register sessions", icon: Clock3 },
+      { id: "orders", label: "Orders & returns", icon: ReceiptText },
+    ],
+  },
+  {
+    name: "Inventory & Supply",
+    items: [
+      { id: "inventory", label: "Inventory", icon: Boxes },
+      { id: "requests", label: "Stock requests", icon: ClipboardCheck },
+    ],
+  },
+  {
+    name: "Management & Reports",
     items: [
       {
         id: "dashboard",
@@ -132,21 +147,6 @@ const groups: {
         icon: LayoutDashboard,
         permissions: ["VIEW_REPORTS", "VIEW_ANALYTICS"],
       },
-      { id: "pos", label: "Point of sale", icon: ShoppingBag },
-      { id: "sessions", label: "Register sessions", icon: Clock3 },
-    ],
-  },
-  {
-    name: "Sales & stock",
-    items: [
-      { id: "orders", label: "Orders & returns", icon: ReceiptText },
-      { id: "inventory", label: "Inventory", icon: Boxes },
-      { id: "requests", label: "Stock requests", icon: ClipboardCheck },
-    ],
-  },
-  {
-    name: "Operations",
-    items: [
       {
         id: "reports",
         label: "Reports & analytics",
@@ -160,14 +160,8 @@ const groups: {
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
       },
       {
-        id: "commerce",
-        label: "Configuration",
-        icon: BadgePercent,
-        roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
-      },
-      {
         id: "manage",
-        label: "Manage",
+        label: "Staff & store management",
         icon: Users,
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
         permissions: ["MANAGE_STAFF", "MANAGE_INVENTORY", "EDIT_PRICES"],
@@ -179,25 +173,36 @@ const groups: {
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
         permissions: ["VIEW_AUDIT_LOGS"],
       },
-      { id: "chat", label: "Store chat", icon: MessageCircle },
     ],
   },
   {
-    name: "System",
+    name: "Communications",
     items: [
-      {
-        id: "admin",
-        label: "Admin workspace",
-        icon: ShieldCheck,
-        roles: ["ADMIN", "SUPER_ADMIN"],
-      },
+      { id: "chat", label: "Store chat", icon: MessageCircle },
       { id: "notifications", label: "Notifications", icon: Bell },
+    ],
+  },
+  {
+    name: "System & Settings",
+    items: [
       { id: "sync", label: "Sync status", icon: Cloud },
+      {
+        id: "commerce",
+        label: "Store configuration",
+        icon: BadgePercent,
+        roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+      },
       {
         id: "settings",
         label: "Settings",
         icon: Settings2,
         roles: ["ADMIN", "MANAGER", "SUPER_ADMIN"],
+      },
+      {
+        id: "admin",
+        label: "Admin workspace",
+        icon: ShieldCheck,
+        roles: ["ADMIN", "SUPER_ADMIN"],
       },
     ],
   },
