@@ -189,8 +189,35 @@ export function PosView({
 
   /* --------------------------- focus / paging ------------------- */
 
+  // Focus only if desktop non-touch device (prevents unwanted virtual keyboard popup on tablets/mobile)
   useEffect(() => {
-    inputRef.current?.focus();
+    const isTouchDevice =
+      window.matchMedia("(pointer: coarse)").matches ||
+      "ontouchstart" in window ||
+      navigator.maxTouchPoints > 0;
+    if (!isTouchDevice) {
+      inputRef.current?.focus();
+    }
+  }, []);
+
+  // Global shortcut (Cmd+K / Ctrl+K or '/') to jump to product search
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      } else if (
+        e.key === "/" &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
   useEffect(() => {
@@ -409,13 +436,16 @@ export function PosView({
           <input
             ref={inputRef}
             type="text"
-            placeholder="Scan barcode (Enter) or search product..."
+            placeholder="Scan barcode or search (⌘K)..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full rounded-xl border border-slate-800 bg-slate-900 py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 transition-colors focus:border-sky-500 focus:outline-none"
+            className="w-full rounded-xl border border-slate-800 bg-slate-900 py-2.5 pl-10 pr-20 text-sm text-white placeholder-slate-500 transition-colors focus:border-sky-500 focus:outline-none"
           />
-          <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1 text-slate-500">
+          <div className="absolute right-2.5 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-slate-500 pointer-events-none">
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-slate-700 bg-slate-800/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+              ⌘K
+            </kbd>
             <Barcode className="h-4 w-4 text-sky-400" />
           </div>
         </div>

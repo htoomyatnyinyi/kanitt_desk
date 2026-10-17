@@ -250,6 +250,22 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
     } finally { setRefreshingQr(false); }
   };
 
+  // Keyboard shortcuts: Cmd+P / Ctrl+P or Enter to trigger print
+  useEffect(() => {
+    if (!receipt) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        handlePrint(previewFormat);
+      } else if (e.key === "Enter" && !isPrinting) {
+        e.preventDefault();
+        handlePrint(previewFormat);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [receipt, previewFormat, isPrinting, handlePrint]);
+
   useEffect(() => {
     if (
       !receipt ||
@@ -565,6 +581,9 @@ export function ReceiptModal({ receipt, onClose, onRefreshDigitalReceipt }: Rece
             >
               <Printer className="h-4 w-4 stroke-[2.5]" />
               <span>{isPrinting ? "Printing…" : `Print Receipt (${paperWidth}mm)`}</span>
+              <kbd className="hidden sm:inline-block rounded bg-slate-950/20 px-1.5 py-0.5 text-[10px] font-bold text-slate-950 border border-slate-950/20">
+                ↵ Enter
+              </kbd>
             </button>
 
             <button

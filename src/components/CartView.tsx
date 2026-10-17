@@ -285,28 +285,30 @@ export function CartView({
         {cartPanel}
       </aside>
       <div className="lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileCartOpen(true)}
-          className="fixed inset-x-0 bottom-15 z-40 flex items-center justify-between border-t border-slate-700 bg-slate-900 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-left shadow-[0_-10px_30px_rgba(0,0,0,0.35)]"
-        >
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-300">
-              <Receipt className="h-5 w-5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-white">
-                View cart · {cart.length} {cart.length === 1 ? "item" : "items"}
+        {cart.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMobileCartOpen(true)}
+            className="fixed inset-x-0 bottom-16 md:bottom-0 z-40 flex items-center justify-between border-t border-slate-700 bg-slate-900/95 backdrop-blur-md px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-left shadow-[0_-10px_30px_rgba(0,0,0,0.5)] transition-all animate-in"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-500/15 text-sky-300 border border-sky-500/20 shadow-inner">
+                <Receipt className="h-5 w-5" />
               </span>
-              <span className="block text-xs text-slate-400">
-                {total.toLocaleString()} MMK
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-white">
+                  View cart · {cart.length} {cart.length === 1 ? "item" : "items"}
+                </span>
+                <span className="block text-xs font-semibold text-sky-400">
+                  {total.toLocaleString()} MMK
+                </span>
               </span>
             </span>
-          </span>
-          <span className="ml-3 shrink-0 rounded-xl bg-sky-500 px-4 py-2.5 text-xs font-bold text-white">
-            Checkout
-          </span>
-        </button>
+            <span className="ml-3 shrink-0 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 px-5 py-2.5 text-xs font-black text-slate-950 shadow-md shadow-sky-500/20 active:scale-95 transition-all">
+              Checkout →
+            </span>
+          </button>
+        )}
         {mobileCartOpen && (
           <div
             className="fixed inset-0 z-50 flex items-end bg-black/70"
