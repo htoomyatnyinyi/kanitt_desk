@@ -171,7 +171,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
   } = useGetStoresQuery();
   const { data: apiSessions, refetch: refetchSessions } = useGetSessionsQuery(
     { storeId: selectedStore?.id },
-    { pollingInterval: 5000, refetchOnFocus: true, refetchOnReconnect: true },
+    { pollingInterval: 15000, refetchOnFocus: true, refetchOnReconnect: true },
   );
   const { data: apiStoreSettings = [] } = useGetStoreSettingsQuery(
     { storeId: selectedStore?.id },
@@ -184,48 +184,75 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     data: apiOrders = [],
     isLoading: isOrdersLoading,
     refetch: refetchOrders,
-  } = useGetOrdersQuery({ storeId: selectedStore?.id });
+  } = useGetOrdersQuery(
+    { storeId: selectedStore?.id },
+    { skip: !["dashboard", "orders", "reports", "erp", "pos"].includes(activeTab) },
+  );
   const { data: apiCategories = [], refetch: refetchCategories } =
-    useGetCategoriesQuery();
-  const { data: brands = [], refetch: refetchBrands } = useGetBrandsQuery();
-  const { data: suppliers = [], refetch: refetchSuppliers } =
-    useGetSuppliersQuery();
-  const { data: customers = [], refetch: refetchCustomers } =
-    useGetCustomersQuery();
-  const { data: staff = [], refetch: refetchStaff } = useGetStaffQuery({
-    storeId: selectedStore?.id,
+    useGetCategoriesQuery(undefined, {
+      skip: !["manage", "inventory", "pos"].includes(activeTab),
+    });
+  const { data: brands = [], refetch: refetchBrands } = useGetBrandsQuery(undefined, {
+    skip: !["manage", "inventory"].includes(activeTab),
   });
+  const { data: suppliers = [], refetch: refetchSuppliers } =
+    useGetSuppliersQuery(undefined, {
+      skip: !["manage", "erp"].includes(activeTab),
+    });
+  const { data: customers = [], refetch: refetchCustomers } =
+    useGetCustomersQuery(undefined, {
+      skip: !["manage"].includes(activeTab),
+    });
+  const { data: staff = [], refetch: refetchStaff } = useGetStaffQuery(
+    { storeId: selectedStore?.id },
+    { skip: !["manage"].includes(activeTab) },
+  );
   const {
     data: purchaseOrders = [],
     isLoading: isPoLoading,
     refetch: refetchPurchaseOrders,
-  } = useGetPurchaseOrdersQuery({ storeId: selectedStore?.id });
+  } = useGetPurchaseOrdersQuery(
+    { storeId: selectedStore?.id },
+    { skip: !["erp", "reports"].includes(activeTab) },
+  );
   const {
     data: expenses = [],
     isLoading: isExpensesLoading,
     refetch: refetchExpenses,
-  } = useGetExpensesQuery({ storeId: selectedStore?.id });
+  } = useGetExpensesQuery(
+    { storeId: selectedStore?.id },
+    { skip: !["erp", "reports"].includes(activeTab) },
+  );
   const { data: expenseCategories = [], refetch: refetchExpenseCategories } =
-    useGetExpenseCategoriesQuery();
+    useGetExpenseCategoriesQuery(undefined, {
+      skip: !["erp"].includes(activeTab),
+    });
   const {
     data: supplierPayments = [],
     isLoading: isSupplierPaymentsLoading,
     refetch: refetchSupplierPayments,
-  } = useGetSupplierPaymentsQuery();
+  } = useGetSupplierPaymentsQuery(undefined, {
+    skip: !["erp"].includes(activeTab),
+  });
   const {
     data: transfers = [],
     isLoading: isTransfersLoading,
     refetch: refetchTransfers,
-  } = useGetStockTransfersQuery();
+  } = useGetStockTransfersQuery(undefined, {
+    skip: !["erp"].includes(activeTab),
+  });
   const { data: transferDestinationStores = [] } =
     useGetTransferDestinationStoresQuery(undefined, {
-      skip: !canAccessTab("erp", userRole, userPermissions),
+      skip: !canAccessTab("erp", userRole, userPermissions) || activeTab !== "erp",
     });
   const {
     data: returns = [],
     isLoading: isReturnsLoading,
     refetch: refetchReturns,
-  } = useGetReturnsQuery({ storeId: selectedStore?.id });
+  } = useGetReturnsQuery(
+    { storeId: selectedStore?.id },
+    { skip: !["erp", "reports"].includes(activeTab) },
+  );
   const [createOrderApi, { isLoading: isCheckoutLoading }] =
     useCreateOrderMutation();
   const [quoteOrder, { isLoading: isPricingLoading }] = useQuoteOrderMutation();
@@ -384,8 +411,8 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     }
   }, [isConnected, selectedStore?.id, issueOfflineLicense]);
 
-  // Normalize API products — fix category union type to plain string
-  const products: Product[] = (() => {
+  // Normalize API products — memoized to prevent infinite re-renders on polling
+  const products: Product[] = useMemo(() => {
     if (!apiProducts) return [];
     return apiProducts.map((p) => ({
       ...p,
@@ -399,7 +426,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       })),
       barcode: p.barcode || "",
     })) as Product[];
-  })();
+  }, [apiProducts]);
 
   const stores = useMemo(() => {
     const available = apiStores || [];
@@ -496,17 +523,30 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     setLastSync(new Date());
   };
 
-  const liveCategories = [
-    "All",
-    ...Array.from(new Set(products.map((p) => p.category))),
-  ];
-  const categories = liveCategories;
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(products.map((p) => p.category)))],
+    [products],
+  );
 
-  const addToCart = (product: Product, variant?: Variant) => {
-    if (!variant) return;
+  const addToCart = (product: Product, variant?: Variant): boolean => {
+    if (!variant) return false;
+    const maxStock = Number(
+      variant.availableStock ??
+      variant.stock ??
+      product.stock ??
+      0,
+    );
+    const cartItemId = `${product.id}::variant::${variant.id}`;
+    const currentInCart = cart.find((item) => item.id === cartItemId)?.quantity || 0;
+
+    // Check if adding 1 more would exceed available stock
+    if (currentInCart >= maxStock) {
+      return false;
+    }
+
     const cartProduct: CartItem = {
       ...product,
-      id: `${product.id}::variant::${variant.id}`,
+      id: cartItemId,
       productId: product.id,
       variantId: variant.id,
       name: `${product.name} · ${variant.name}`,
@@ -514,7 +554,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       barcode: variant.barcode || product.barcode,
       price: Number(variant.price ?? product.price ?? 0),
       costPrice: variant.costPrice ?? product.costPrice,
-      stock: Number(variant.availableStock ?? variant.stock ?? 0),
+      stock: maxStock,
       quantity: 1,
       variants: [
         {
@@ -524,9 +564,13 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         },
       ],
     };
+
     setCart((prev) => {
       const existing = prev.find((item) => item.id === cartProduct.id);
       if (existing) {
+        if (existing.quantity >= maxStock) {
+          return prev;
+        }
         return prev.map((item) =>
           item.id === cartProduct.id
             ? { ...item, quantity: item.quantity + 1 }
@@ -535,6 +579,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
       }
       return [...prev, { ...cartProduct, quantity: 1 }];
     });
+    return true;
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -543,7 +588,11 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         prev
           .map((item) => {
             if (item.id === id) {
+              const maxStock = Number(item.stock ?? Infinity);
               const newQty = item.quantity + delta;
+              if (delta > 0 && newQty > maxStock) {
+                return item; // Cap at max available stock
+              }
               return newQty > 0 ? { ...item, quantity: newQty } : null;
             }
             return item;
@@ -556,19 +605,22 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory =
-      !selectedCategory ||
-      selectedCategory === "All" ||
-      product.category === selectedCategory;
+  const filteredProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      (product.name || "").toLowerCase().includes(q) ||
-      (product.barcode || "").toLowerCase().includes(q) ||
-      (product.sku || "").toLowerCase().includes(q);
-    return matchesCategory && matchesSearch;
-  });
+    const hasCategoryFilter = selectedCategory && selectedCategory !== "All";
+
+    return products.filter((product) => {
+      if (hasCategoryFilter && product.category !== selectedCategory) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        (product.name || "").toLowerCase().includes(q) ||
+        (product.barcode || "").toLowerCase().includes(q) ||
+        (product.sku || "").toLowerCase().includes(q)
+      );
+    });
+  }, [products, selectedCategory, searchQuery]);
 
   const cartSubtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
@@ -984,6 +1036,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
               filteredProducts={filteredProducts}
               allProducts={products}
               addToCart={addToCart}
+              cart={cart}
             />
           </main>
           <CartView

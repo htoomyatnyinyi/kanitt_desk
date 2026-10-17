@@ -116,7 +116,7 @@ export function CartView({
                   <h4 className="font-bold text-xs text-slate-100 truncate group-hover:text-sky-300 transition-colors">
                     {item.name}
                   </h4>
-                  <div className="mt-1 flex items-center gap-2 text-[11px]">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
                     <span className="font-extrabold text-sky-400">
                       {(item.price * item.quantity).toLocaleString()}{" "}
                       <span className="text-[9px] font-normal text-slate-400">MMK</span>
@@ -124,6 +124,11 @@ export function CartView({
                     {item.quantity > 1 && (
                       <span className="text-[10px] text-slate-500 font-medium">
                         ({item.price.toLocaleString()} × {item.quantity})
+                      </span>
+                    )}
+                    {item.stock !== undefined && item.quantity >= Number(item.stock) && (
+                      <span className="rounded bg-amber-500/15 px-1.5 py-0.2 text-[9px] font-bold text-amber-400 border border-amber-500/30">
+                        Max stock ({item.stock})
                       </span>
                     )}
                   </div>
@@ -143,9 +148,19 @@ export function CartView({
                       {item.quantity}
                     </span>
                     <button
+                      disabled={item.stock !== undefined && item.quantity >= Number(item.stock)}
                       onClick={() => updateQuantity(item.id, 1)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+                        item.stock !== undefined && item.quantity >= Number(item.stock)
+                          ? "opacity-30 cursor-not-allowed text-slate-600"
+                          : "hover:bg-slate-800 text-slate-400 hover:text-white"
+                      }`}
                       aria-label="Increase quantity"
+                      title={
+                        item.stock !== undefined && item.quantity >= Number(item.stock)
+                          ? `Max stock (${item.stock}) reached`
+                          : "Increase quantity"
+                      }
                     >
                       <Plus className="w-3 h-3" />
                     </button>
