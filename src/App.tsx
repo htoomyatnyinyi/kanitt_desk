@@ -88,6 +88,124 @@ import {
 } from "./services/offlineSalesQueue";
 import { useSystemBack } from "./hooks/SystemBackProvider";
 
+/* ── Dismiss the HTML splash screen ─────────────────────────────────────── */
+function dismissSplash() {
+  const el = document.getElementById("splash-screen");
+  if (el) {
+    el.classList.add("splash-hidden");
+    setTimeout(() => el.remove(), 600);
+  }
+}
+
+/* ── Startup loading screen (shown while critical data initializes) ──── */
+function StartupLoading({
+  steps,
+}: {
+  steps: { label: string; done: boolean }[];
+}) {
+  useEffect(() => {
+    // Dismiss the HTML splash once React has mounted this component
+    dismissSplash();
+  }, []);
+
+  const completedCount = steps.filter((s) => s.done).length;
+  const progress = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-950">
+      {/* Ambient glow */}
+      <div
+        className="pointer-events-none absolute"
+        style={{
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 500,
+          height: 500,
+          borderRadius: "50%",
+          background:
+            "radial-gradient(circle, rgba(56,189,248,0.06) 0%, rgba(14,165,233,0.02) 40%, transparent 70%)",
+        }}
+      />
+
+      {/* Logo */}
+      <div className="animate-in relative mb-6 h-20 w-20 overflow-hidden rounded-[18px] shadow-[0_0_60px_rgba(56,189,248,0.12),0_8px_32px_rgba(0,0,0,0.5)]">
+        <img
+          src="/kanitt-mark.svg"
+          alt="KANITT"
+          className="h-full w-full object-cover"
+        />
+      </div>
+
+      {/* Brand */}
+      <h1
+        className="animate-in mb-1 text-2xl font-black tracking-[0.15em]"
+        style={{
+          background:
+            "linear-gradient(135deg, #e2e8f0 0%, #38bdf8 50%, #818cf8 100%)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          backgroundClip: "text",
+        }}
+      >
+        KANITT
+      </h1>
+      <p className="animate-in mb-8 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+        Point of Sale System
+      </p>
+
+      {/* Progress bar */}
+      <div className="mb-6 h-1 w-56 overflow-hidden rounded-full bg-slate-800/80">
+        <div
+          className="h-full rounded-full transition-all duration-700 ease-out"
+          style={{
+            width: `${progress}%`,
+            background:
+              "linear-gradient(90deg, #38bdf8, #818cf8)",
+          }}
+        />
+      </div>
+
+      {/* Step list */}
+      <div className="flex flex-col items-center gap-2">
+        {steps.map((step, i) => (
+          <div
+            key={step.label}
+            className="flex items-center gap-2 text-xs font-medium transition-all duration-300"
+            style={{
+              animationDelay: `${i * 100}ms`,
+              opacity: step.done ? 0.4 : 1,
+            }}
+          >
+            {step.done ? (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+            ) : (
+              <span className="flex h-4 w-4 items-center justify-center">
+                <span
+                  className="h-3 w-3 rounded-full border-[2px] border-sky-400/30 border-t-sky-400"
+                  style={{ animation: "splash-spin 0.8s linear infinite" }}
+                />
+              </span>
+            )}
+            <span className={step.done ? "text-slate-500 line-through" : "text-slate-300"}>
+              {step.label}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Version */}
+      <p className="absolute bottom-6 text-[10px] font-medium tracking-wider text-slate-700">
+        v0.1.0
+      </p>
+    </div>
+  );
+}
+
 // ── POS Shell (rendered only when authenticated) ───────────────────────────
 function PosShell({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<
@@ -848,6 +966,35 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
     setReceivedAmount("");
   };
 
+  /* ── Startup loading gate ─────────────────────────────────────────────── */
+  const [startupMinElapsed, setStartupMinElapsed] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setStartupMinElapsed(true), 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const healthReady = !isHealthLoading;
+  const productsReady = !isProductsLoading;
+  const storeReady = !!selectedStore;
+
+  const startupSteps = [
+    { label: "Connecting to server…", done: healthReady },
+    { label: "Loading products…", done: productsReady },
+    { label: "Preparing workspace…", done: storeReady },
+  ];
+
+  const allStepsDone = healthReady && productsReady && storeReady;
+  const showStartupLoading = !allStepsDone || !startupMinElapsed;
+
+  // Dismiss the HTML splash once fully loaded
+  useEffect(() => {
+    if (!showStartupLoading) dismissSplash();
+  }, [showStartupLoading]);
+
+  if (showStartupLoading) {
+    return <StartupLoading steps={startupSteps} />;
+  }
+
   return (
     <div className="flex h-screen min-h-0 w-full min-w-0 bg-slate-950 text-slate-100 font-sans select-none overflow-hidden">
       <Sidebar
@@ -874,7 +1021,9 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {activeTab === "orders" && (
-        <OrdersView orders={apiOrders} isLoading={isOrdersLoading} />
+        <div className="slide-left-in flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+          <OrdersView orders={apiOrders} isLoading={isOrdersLoading} />
+        </div>
       )}
       {activeTab === "manage" && (
         <ManageView
@@ -1026,7 +1175,7 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
 
       {activeTab === "pos" && (
         <>
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+          <main className="slide-left-in flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
             <PosView
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
@@ -1170,27 +1319,29 @@ function PosShell({ onLogout }: { onLogout: () => void }) {
         />
       )}
       {activeTab === "sessions" && (
-        <SessionsView
-          sessions={apiSessions}
-          orders={apiOrders}
-          storeId={selectedStore?.id}
-          storeName={selectedStore?.name}
-          userId={authUser?.id}
-          userRole={userRole}
-          sessionMode={registerSessionMode}
-          onOpen={(storeId, openingBalance) =>
-            openRegisterSession({ storeId, openingBalance }).unwrap()
-          }
-          onClose={(sessionId, closingBalance) => {
-            if (
-              queuedSales.some((sale) => sale.payload.sessionId === sessionId)
-            )
-              throw new Error(
-                "This register has offline sales waiting to sync. Reconnect and sync them before closing the session.",
-              );
-            return closeRegisterSession({ sessionId, closingBalance }).unwrap();
-          }}
-        />
+        <div className="slide-left-in flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+          <SessionsView
+            sessions={apiSessions}
+            orders={apiOrders}
+            storeId={selectedStore?.id}
+            storeName={selectedStore?.name}
+            userId={authUser?.id}
+            userRole={userRole}
+            sessionMode={registerSessionMode}
+            onOpen={(storeId, openingBalance) =>
+              openRegisterSession({ storeId, openingBalance }).unwrap()
+            }
+            onClose={(sessionId, closingBalance) => {
+              if (
+                queuedSales.some((sale) => sale.payload.sessionId === sessionId)
+              )
+                throw new Error(
+                  "This register has offline sales waiting to sync. Reconnect and sync them before closing the session.",
+                );
+              return closeRegisterSession({ sessionId, closingBalance }).unwrap();
+            }}
+          />
+        </div>
       )}
       {activeTab === "settings" && (
         <SettingsView
@@ -1253,6 +1404,7 @@ export default function App() {
   };
 
   if (!token) {
+    dismissSplash();
     return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
   }
 

@@ -10,6 +10,94 @@
   </head>
 
   <body>
+    <!-- Instant splash screen (visible before React loads) -->
+    <div id="splash-screen" style="
+      position: fixed; inset: 0; z-index: 99999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(145deg, #020617 0%, #0f172a 50%, #020617 100%);
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    ">
+      <!-- Ambient glow -->
+      <div style="
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 400px; height: 400px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, rgba(14,165,233,0.03) 40%, transparent 70%);
+        pointer-events: none;
+      "></div>
+
+      <!-- Logo -->
+      <div style="
+        position: relative; width: 88px; height: 88px; margin-bottom: 28px;
+        border-radius: 22px; overflow: hidden;
+        box-shadow: 0 0 60px rgba(56,189,248,0.15), 0 8px 32px rgba(0,0,0,0.5);
+        animation: splash-logo-in 0.8s cubic-bezier(0.16,1,0.3,1) both;
+      ">
+        <img src="/kanitt-mark.svg" alt="KANITT" style="width:100%;height:100%;object-fit:cover;" />
+      </div>
+
+      <!-- Brand name -->
+      <h1 style="
+        margin: 0 0 8px 0; font-family: system-ui, -apple-system, sans-serif;
+        font-size: 28px; font-weight: 900; letter-spacing: 0.15em;
+        background: linear-gradient(135deg, #e2e8f0 0%, #38bdf8 50%, #818cf8 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: splash-text-in 0.8s cubic-bezier(0.16,1,0.3,1) 0.15s both;
+      ">KANITT</h1>
+
+      <!-- Tagline -->
+      <p style="
+        margin: 0 0 36px 0; font-family: system-ui, -apple-system, sans-serif;
+        font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase;
+        color: #64748b;
+        animation: splash-text-in 0.8s cubic-bezier(0.16,1,0.3,1) 0.3s both;
+      ">Point of Sale System</p>
+
+      <!-- Loading spinner -->
+      <div style="
+        position: relative; width: 36px; height: 36px;
+        animation: splash-text-in 0.8s cubic-bezier(0.16,1,0.3,1) 0.45s both;
+      ">
+        <div style="
+          position: absolute; inset: 0; border-radius: 50%;
+          border: 2.5px solid rgba(56,189,248,0.1);
+        "></div>
+        <div style="
+          position: absolute; inset: 0; border-radius: 50%;
+          border: 2.5px solid transparent; border-top-color: #38bdf8;
+          animation: splash-spin 0.9s linear infinite;
+        "></div>
+      </div>
+
+      <!-- Version -->
+      <p style="
+        position: absolute; bottom: 24px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 10px; font-weight: 500; color: #334155;
+        letter-spacing: 0.1em;
+        animation: splash-text-in 0.8s cubic-bezier(0.16,1,0.3,1) 0.6s both;
+      ">v0.1.0</p>
+
+      <style>
+        @keyframes splash-logo-in {
+          from { opacity: 0; transform: scale(0.7) translateY(12px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes splash-text-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes splash-spin {
+          to { transform: rotate(360deg); }
+        }
+        #splash-screen.splash-hidden {
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+      </style>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

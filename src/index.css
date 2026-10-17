@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
 @layer base {
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+  }
   body {
     @apply bg-slate-950 text-slate-100 font-sans antialiased select-none;
     margin: 0;
@@ -10,12 +12,20 @@
     overflow-x: hidden;
     overflow-y: auto;
   }
-  button, input, select { font: inherit; }
-  button { cursor: pointer; }
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+  button {
+    cursor: pointer;
+  }
 }
 
 @supports (min-height: 100dvh) {
-  body { min-height: 100dvh; }
+  body {
+    min-height: 100dvh;
+  }
 }
 
 @keyframes animate-in-keyframe {
@@ -29,8 +39,38 @@
   }
 }
 
+@keyframes slide-left-keyframe {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-right-keyframe {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .animate-in {
   animation: animate-in-keyframe 0.25s ease-out;
+}
+
+.slide-left-in {
+  animation: slide-left-keyframe 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.slide-right-in {
+  animation: slide-right-keyframe 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Keep every form dialog usable on short screens and touch devices. */
